@@ -165,6 +165,9 @@ input[type="checkbox"] { width: auto; }
 .switch input:checked { background: var(--green); }
 .switch input:checked::after { transform: translateX(20px); }
 
+/* Casilla para elegir qué aplicar (vista previa del plan) */
+.elegir { appearance: auto; -webkit-appearance: checkbox; width: 22px; height: 22px; padding: 0; margin: 1px 0 0; flex: none; accent-color: var(--accent); cursor: pointer; }
+
 /* Check redondo */
 .check { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--text3); background: none; flex: none; cursor: pointer; display: grid; place-items: center; color: #fff; font-size: 15px; padding: 0; }
 .check.on { background: var(--green); border-color: var(--green); }

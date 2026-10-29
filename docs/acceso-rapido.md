@@ -11,28 +11,21 @@ Así se abre a pantalla completa, como una app normal, y tus datos quedan proteg
 
 > Importante: usa siempre la app desde este icono. Si solo la abres en Safari sin instalarla, iOS puede borrar los datos tras unas semanas sin usarla.
 
-## 2 · Abrirla con el Botón de Acción (iPhone 17 Pro)
+## 2 · Tenerla siempre a mano
 
-Pulsas el botón lateral y se abre la app al instante.
+- **En el Dock** (la fila de abajo, visible en todas las pantallas): mantén pulsado el icono hasta que se mueva, arrástralo abajo y pulsa **OK**.
+- **Buscándola**: desliza hacia abajo en el centro de la pantalla de inicio y escribe «Mejor».
 
-1. Abre **Atajos** → **+** → busca **URL** y añade **URL**. Pega la dirección de tu app.
-2. Añade debajo **Abrir URL**.
-3. Renombra el atajo a **Abrir Mi Mejor Versión** y guárdalo.
-4. Ve a **Ajustes → Botón de Acción** → desliza hasta **Atajo** → elige **Abrir Mi Mejor Versión**.
+## 3 · Abrirla con el Botón de Acción o un widget
 
-> Truco: si al final de la dirección añades `#coach`, el botón te lleva directo al chat con tu coach. Con `#ahorro` vas directo al cerdito.
+1. Abre **Atajos** → **+** → busca la acción **Abrir app** y añádela.
+2. Pulsa **App** y busca **Mejor Versión**.
+   - Si aparece, elígela, llama al atajo **Abrir Mi Mejor Versión** y guárdalo.
+   - Si no aparece, usa el icono del Dock: es igual de rápido.
+3. **Botón de Acción**: **Ajustes → Botón de Acción** → desliza hasta **Atajo** → elige **Abrir Mi Mejor Versión**.
+4. **Widget**: mantén pulsada la pantalla de inicio → **Editar** → **Añadir widget** → **Atajos** → elige el atajo.
 
-## 3 · Widget en la pantalla de inicio o de bloqueo
-
-1. Crea dos o tres atajos como el del paso 2, cada uno con una sección:
-   - **Mi día** → dirección terminada en `#hoy`
-   - **Mi coach** → dirección terminada en `#coach`
-   - **Apuntar gasto** → dirección terminada en `#ahorro`
-2. Mantén pulsada la pantalla de inicio → **Editar** → **Añadir widget**.
-3. Busca **Atajos**, elige el tamaño mediano y pulsa **Añadir widget**.
-4. Mantén pulsado el widget → **Editar widget** → elige la carpeta o los atajos que has creado.
-
-Para la **pantalla de bloqueo**: mantenla pulsada → **Personalizar** → **Pantalla bloqueada** → toca la zona de widgets → **Atajos** → elige uno.
+> Importante: no uses la acción «Abrir URL» con la dirección de la app. Eso la abre en Safari, que guarda los datos aparte, y la verías vacía.
 
 ## 4 · Copias de seguridad
 

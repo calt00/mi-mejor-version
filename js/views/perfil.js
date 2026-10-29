@@ -4,15 +4,23 @@ import { getProfile, saveProfile, getSettings, saveSettings } from '../datos.js'
 import { esc, formData, toast, refrescar, sheet, miniMarkdown, hoyISO, opciones, fmtFecha } from '../util.js';
 import { probarConexion } from '../coach.js';
 import { mostrarBienvenida } from './bienvenida.js';
+import { abrirPlan } from './plan.js';
 
 export async function render(root) {
-  const [p, s, ultimaCopia] = await Promise.all([getProfile(), getSettings(), kvGet('ultimaCopia')]);
+  const [p, s, ultimaCopia, situacion] = await Promise.all([getProfile(), getSettings(), kvGet('ultimaCopia'), kvGet('miSituacion')]);
   let persistente = null;
   try { persistente = await navigator.storage?.persisted?.(); } catch { /* sin soporte */ }
   const instalada = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
 
   root.innerHTML = `
     ${!instalada ? `<div class="aviso">📱 <b>Instálala en tu iPhone</b>: en Safari pulsa Compartir → «Añadir a pantalla de inicio». Así se abre como una app y tus datos quedan a salvo. <a href="#" data-guia="acceso-rapido">Ver cómo</a></div>` : ''}
+
+    <div class="card">
+      <h3 style="margin-bottom:4px">📝 Tu situación y tus propósitos</h3>
+      <p class="mini" style="margin-bottom:10px">${situacion?.texto ? `Me lo contaste el ${fmtFecha(situacion.fecha, { day: 'numeric', month: 'long' })}. Si tu vida cambia (nuevo trabajo, exámenes, vacaciones…), actualízalo y rehago tu plan.` : 'Cuéntame tu vida y tus objetivos con tus palabras y organizo tu horario, tus hábitos y tu ahorro por ti.'}</p>
+      ${situacion?.texto ? `<p class="nota" style="white-space:pre-line;max-height:120px;overflow:hidden">${esc(situacion.texto)}</p>` : ''}
+      <button class="btn ancho" id="plan">${situacion?.texto ? '✏️ Actualizar y rehacer mi plan' : '🧠 Crear mi plan a medida'}</button>
+    </div>
 
     <form id="perfil" class="card">
       <h3 style="margin-bottom:4px">👤 Sobre ti</h3>
@@ -91,6 +99,7 @@ export async function render(root) {
   root.querySelectorAll('[data-guia]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); abrirGuia(b.dataset.guia); }));
   root.querySelector('#exportar').addEventListener('click', async () => { if (await exportar()) refrescar(); });
   root.querySelector('#bienvenida').addEventListener('click', mostrarBienvenida);
+  root.querySelector('#plan').addEventListener('click', () => abrirPlan());
   root.querySelector('#importar').addEventListener('change', async e => {
     const file = e.target.files[0];
     if (!file) return;

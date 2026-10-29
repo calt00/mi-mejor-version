@@ -24,6 +24,7 @@
     import { progresoDiario, mediaMovil, mejorRacha, resumenSemana, semanaPendiente, inicioHabito } from '../js/progreso.js';
     import { logrosCumplidos, LOGROS } from '../js/logros.js';
     import { barrasSVG, calendarioHTML } from '../js/grafica.js';
+    import { normalizarPlan, cruzarConExistentes, unirFranjas } from '../js/plan.js';
 
     const lista = document.getElementById('lista');
     let ok = 0, ko = 0;
@@ -167,6 +168,12 @@
       verdad(Object.values(porDia).every(n => n === 1), 'repite objetivo el mismo día habiendo días libres');
     });
 
+    prueba('Generador: no parte un hueco libre por la mitad', () => {
+      const tarde = Array.from({ length: 7 }, () => [{ inicio: '18:00', fin: '21:30' }]);
+      const { nuevos } = generarSemana({ fecha: lunes, goals: [{ id: 'L', titulo: 'Leer', horasSemana: 0.5, prioridad: 1, momento: 'noche', sesionMin: 30 }], blocks: [], disponibilidad: tarde, prefs, settings });
+      igual(`${nuevos[0].inicio}-${nuevos[0].fin}`, '21:00-21:30', 'pegado al final del hueco y dentro de la noche');
+    });
+
     prueba('Generador: avisa si no caben las horas', () => {
       const { avisos } = generarSemana({ fecha: lunes, goals: [{ id: 'X', titulo: 'Mucho', horasSemana: 40, prioridad: 2 }], blocks: [], disponibilidad: disp, prefs, settings });
       verdad(avisos.length === 1 && avisos[0].includes('Mucho'), JSON.stringify(avisos));
@@ -291,6 +298,51 @@
       const cal = calendarioHTML('2026-10', new Set(['2026-10-05']));
       igual((cal.match(/data-dia=/g) || []).length, 31);
       verdad(/class="cal-dia on[^"]*"\s+data-dia="2026-10-05"/.test(cal), 'día marcado');
+    });
+
+    // ---------- Plan a partir del texto ----------
+    prueba('Plan: limpia horas, días y franjas solapadas', () => {
+      const p = normalizarPlan({ disponibilidad: [
+        { dia: 0, inicio: '18:00', fin: '20:00' }, { dia: 0, inicio: '19:30', fin: '21:00' }, { dia: 0, inicio: '7:00', fin: '8:00' },
+        { dia: 1, inicio: '22:00', fin: '21:00' }, { dia: 9, inicio: '10:00', fin: '11:00' }, { dia: 2, inicio: '25:00', fin: '26:00' },
+      ] });
+      igual(JSON.stringify(p.disponibilidad[0]), '[{"inicio":"07:00","fin":"08:00"},{"inicio":"18:00","fin":"21:00"}]');
+      igual(p.disponibilidad[1].length, 0, 'fin antes que inicio'); igual(p.disponibilidad[2].length, 0, 'hora imposible');
+      igual(p.disponibilidad.length, 7);
+      igual(normalizarPlan({ disponibilidad: [] }).disponibilidad, null, 'sin franjas no toca la disponibilidad');
+      igual(unirFranjas([{ inicio: '10:00', fin: '11:00' }, { inicio: '11:00', fin: '12:00' }]).length, 1, 'franjas que se tocan');
+    });
+
+    prueba('Plan: objetivos válidos, sin duplicados y con valores dentro de rango', () => {
+      const p = normalizarPlan({ objetivos: [
+        { titulo: 'Inglés B2', area: 'estudio', prioridad: 5, horasSemana: 3.3, momento: 'tarde', fechaLimite: '2027-06-01', tareas: ['Test de nivel', ''] },
+        { titulo: 'inglés b2', area: 'estudio', prioridad: 1, horasSemana: 1 },
+        { titulo: 'Gimnasio', area: 'deporte', prioridad: 0, horasSemana: 99, momento: 'madrugada', fechaLimite: 'junio' },
+        { titulo: '   ' },
+      ] });
+      igual(p.objetivos.length, 2, 'duplicado y vacío fuera');
+      const [ing, gym] = p.objetivos;
+      igual(ing.prioridad, 3); igual(ing.horasSemana, 3.5); igual(ing.tareas.length, 1); igual(ing.fechaLimite, '2027-06-01');
+      igual(gym.area, 'personal', 'área desconocida'); igual(gym.prioridad, 1); igual(gym.horasSemana, 40); igual(gym.momento, 'cualquiera'); igual(gym.fechaLimite, '');
+    });
+
+    prueba('Plan: dinero solo si hay cifras y perfil sin campos vacíos', () => {
+      const p = normalizarPlan({ perfil: { nombre: 'Dani', sobreMi: '  ', rutina: 'Trabajo de 9 a 17' }, ingresos: { nomina: 0 },
+        gastosFijos: [{ nombre: 'Alquiler', importe: 550, categoria: 'vivienda', dia: 1 }, { nombre: 'Nada', importe: 0, categoria: 'otros' }, { nombre: 'Netflix', importe: 13, categoria: 'suscripciones' }],
+        metasAhorro: [{ nombre: 'Japón', meta: 2000 }, { nombre: 'Sin cifra', meta: 0 }] });
+      igual(JSON.stringify(Object.keys(p.perfil)), '["nombre","rutina"]');
+      igual(p.ingresos, null, 'sin nómina');
+      igual(p.gastosFijos.length, 2); igual(p.gastosFijos[1].suscripcion, true);
+      igual(p.metasAhorro.length, 1); igual(p.metasAhorro[0].emoji, '🐷');
+      igual(normalizarPlan({ ingresos: { nomina: 1500, diaCobro: 40 } }).ingresos.diaCobro, 31);
+    });
+
+    prueba('Plan: reconoce lo que ya existe para actualizarlo en vez de duplicarlo', () => {
+      const p = cruzarConExistentes(normalizarPlan({ objetivos: [{ titulo: 'Leer más', area: 'personal', horasSemana: 2 }, { titulo: 'Correr', area: 'salud', horasSemana: 2 }],
+        habitos: [{ titulo: 'beber agua' }], metasAhorro: [{ nombre: 'Japón', meta: 3000 }] }),
+        { goals: [{ id: 'g1', titulo: 'Leer Más' }, { id: 'g2', titulo: 'Correr', archivado: true }], habits: [{ id: 'h1', titulo: 'Beber agua' }], savingsGoals: [{ id: 's1', nombre: 'japón' }] });
+      igual(p.objetivos[0].existente, 'g1'); igual(p.objetivos[1].existente, null, 'archivado no cuenta');
+      igual(p.habitos[0].existente, 'h1'); igual(p.metasAhorro[0].existente, 's1');
     });
 
     // ---------- Otros ----------

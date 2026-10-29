@@ -6,6 +6,7 @@ import { bloqueHTML, conectarBloques, abrirEditorBloque, abrirEnvioIphone, carga
 import { generarSemana, validarBloques, seConserva, ordenarBloques, esImportante } from '../scheduler.js';
 import { horarioPorPeticion, ErrorIA } from '../coach.js';
 import { asignarFrases } from '../iphone.js';
+import { abrirPlan } from './plan.js';
 
 const estado = { modo: 'dia', fecha: hoyISO(), avisos: [] };
 
@@ -35,7 +36,8 @@ export async function render(root) {
       <button class="btn-icon" data-mover="1" aria-label="Siguiente">›</button>
     </div>
     <div class="chips">
-      <button class="chip activa" id="pedir">✨ Pídeme tu horario</button>
+      <button class="chip activa" id="plan">🧠 Mi plan a medida</button>
+      <button class="chip" id="pedir">✨ Pídeme tu horario</button>
       <button class="chip" id="generar">⚙️ Generar semana</button>
       <button class="chip" id="enviar">📲 Enviar al iPhone</button>
       <button class="chip" id="disp">🕒 Disponibilidad</button>
@@ -56,6 +58,7 @@ export async function render(root) {
   root.querySelector('#ir-hoy')?.addEventListener('click', e => { e.preventDefault(); estado.fecha = hoy; refrescar(); });
   root.querySelectorAll('[data-anadir]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); abrirEditorBloque(null, { fecha: a.dataset.anadir }); }));
   root.querySelector('#nuevo').addEventListener('click', () => abrirEditorBloque(null, { fecha: estado.fecha < hoy ? hoy : estado.fecha }));
+  root.querySelector('#plan').addEventListener('click', () => abrirPlan());
   root.querySelector('#pedir').addEventListener('click', () => abrirPeticionHorario());
   root.querySelector('#generar').addEventListener('click', generar);
   root.querySelector('#enviar').addEventListener('click', () => abrirEnvioIphone(estado.modo === 'semana' ? 'semana' : estado.fecha === addDays(hoy, 1) ? 'manana' : 'hoy'));

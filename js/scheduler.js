@@ -76,11 +76,13 @@ export function generarSemana({ fecha, goals, blocks, disponibilidad, prefs, set
       if (d.carga + L > maxDia) return;
       for (const [s, e] of d.libres) {
         if (e - s < L) continue;
-        const inicios = [s];
-        if (win) { const ws = Math.max(s, win[0]); if (ws + L <= e && ws !== s) inicios.push(ws); }
-        for (const ini of inicios) {
+        // También al final del hueco, para no partirlo en trozos que luego no sirvan a otro objetivo.
+        const inicios = [s, e - L];
+        if (win) { const ws = Math.max(s, win[0]); if (ws + L <= e) inicios.push(ws); }
+        for (const ini of new Set(inicios)) {
           const enVentana = !win || (ini >= win[0] && ini + L <= win[1]);
-          const score = [d.porGoal[g.id] ? 1 : 0, enVentana ? 0 : 1, d.carga, idx, ini];
+          const enBorde = ini === s || ini + L === e;
+          const score = [d.porGoal[g.id] ? 1 : 0, enVentana ? 0 : 1, d.carga, idx, enBorde ? 0 : 1, ini];
           if (!mejor || menor(score, mejor.score)) mejor = { d, ini, score };
         }
       }

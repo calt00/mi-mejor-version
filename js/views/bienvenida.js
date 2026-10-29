@@ -1,9 +1,10 @@
 // Bienvenida guiada: primeros pasos la primera vez que se abre la app.
-import { db, kvSet } from '../db.js';
+import { db, kvGet, kvSet } from '../db.js';
 import { AREAS, getProfile, saveProfile, getSettings, saveSettings, saveDisponibilidad } from '../datos.js';
 import { esc, opciones, toast, uid, hoyISO, refrescar } from '../util.js';
 import { probarConexion } from '../coach.js';
 import { editarDisponibilidad } from './horario.js';
+import { abrirPlan } from './plan.js';
 
 const f = (inicio, fin) => ({ inicio, fin });
 const PRESETS = {
@@ -15,12 +16,15 @@ const PRESETS = {
     v: [...Array(5).fill([f('20:00', '22:00')]), [f('10:00', '14:00'), f('16:00', '20:00')], [f('10:00', '14:00'), f('16:00', '20:00')]] },
 };
 
-const PASOS = ['hola', 'nombre', 'horas', 'objetivo', 'gemini', 'instalar'];
+// Con clave de Gemini, la app monta el plan a partir de tu texto; sin ella, se rellena paso a paso.
+const CON_IA = ['hola', 'gemini', 'situacion', 'instalar'];
+const MANUAL = ['hola', 'gemini', 'nombre', 'horas', 'objetivo', 'instalar'];
 
 export async function mostrarBienvenida() {
   if (document.querySelector('.bienvenida')) return;
-  const [perfil, settings] = await Promise.all([getProfile(), getSettings()]);
-  const datos = { nombre: perfil.nombre, preset: 'tardes', objetivo: null, apiKey: settings.apiKey };
+  const [perfil, settings, situacion] = await Promise.all([getProfile(), getSettings(), kvGet('miSituacion')]);
+  const datos = { nombre: perfil.nombre, preset: 'tardes', objetivo: null, apiKey: settings.apiKey, situacion: situacion?.texto || '', planAplicado: false };
+  let PASOS = CON_IA;
   const capa = document.createElement('div');
   capa.className = 'bienvenida';
   capa.setAttribute('role', 'dialog');
@@ -33,8 +37,11 @@ export async function mostrarBienvenida() {
     await kvSet('bienvenidaHecha', true);
     capa.remove();
     document.body.classList.remove('no-scroll');
-    if (location.hash !== '#hoy' && location.hash) location.hash = '#hoy'; else refrescar();
-    if (completa) toast(datos.objetivo ? '🎉 ¡Todo listo! Ve a Horario → «Generar semana» para planificar tu objetivo.' : '🎉 ¡Todo listo! Empieza creando tu primer objetivo.', 5000);
+    const destino = datos.planAplicado ? '#horario' : '#hoy';
+    if (location.hash !== destino) location.hash = destino; else refrescar();
+    if (!completa) return;
+    toast(datos.planAplicado ? '🎉 ¡Todo listo! Este es tu horario de la semana.'
+      : datos.objetivo ? '🎉 ¡Todo listo! Ve a Horario → «Generar semana» para planificar tu objetivo.' : '🎉 ¡Todo listo! Empieza creando tu primer objetivo.', 5000);
   };
 
   const pantalla = {
@@ -42,8 +49,15 @@ export async function mostrarBienvenida() {
       <div class="b-ico">🌱</div>
       <h2>¡Hola! Empieza tu mejor versión</h2>
       <p class="sub">Esta app te ayuda a <b>cumplir tus objetivos</b>, organizar tu <b>horario</b>, <b>ahorrar</b> con tu cerdito y tener un <b>coach</b> que te conoce.</p>
-      <p class="sub">Te haré 4 preguntas rápidas para dejarla preparada. Tardas 2 minutos.</p>
+      <p class="sub">Solo tienes que <b>contarme tu situación y lo que quieres conseguir</b>, con tus palabras. Yo organizo tus objetivos, tus horas libres, tus hábitos y tu horario.</p>
       <button class="btn ancho" data-sig>Empezar</button>`,
+    situacion: () => `
+      <div class="b-ico">📝</div>
+      <h2>Cuéntame tu vida</h2>
+      <p class="sub">Como se lo contarías a un amigo. Por ejemplo: a qué te dedicas y tu horario, a qué hora te levantas y te acuestas, qué quieres conseguir y para cuándo, qué te cuesta… y si quieres, tu sueldo y para qué ahorras.</p>
+      <textarea id="b-situacion" style="min-height:200px" placeholder="Ej.: Trabajo de lunes a viernes de 9 a 17 h y tardo 30 min en llegar. Me levanto a las 7… Quiero sacarme el B2 de inglés antes de junio, ir al gimnasio 3 días…">${esc(datos.situacion)}</textarea>
+      <button class="btn ancho" data-sig>✨ Crear mi plan</button>
+      <button class="btn gris ancho" data-manual>Prefiero rellenarlo paso a paso</button>`,
     nombre: () => `
       <div class="b-ico">👋</div>
       <h2>¿Cómo te llamas?</h2>
@@ -71,8 +85,8 @@ export async function mostrarBienvenida() {
       <button class="btn gris ancho" data-saltar-paso style="margin-top:8px">Lo creo más tarde</button>`,
     gemini: () => `
       <div class="b-ico">🤖</div>
-      <h2>Activa tu coach (gratis)</h2>
-      <p class="sub">El coach usa Gemini, la IA gratuita de Google. Necesitas una «clave» (API key):</p>
+      <h2>Activa la IA (gratis)</h2>
+      <p class="sub">Tu plan a medida y tu coach usan Gemini, la IA gratuita de Google. Necesitas una «clave» (API key):</p>
       <ol class="sub" style="text-align:left;padding-left:20px">
         <li>Abre <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> e inicia sesión con tu cuenta de Google.</li>
         <li>Pulsa «Create API key» y cópiala.</li>
@@ -81,7 +95,7 @@ export async function mostrarBienvenida() {
       <input id="apiKey" type="password" value="${esc(datos.apiKey)}" placeholder="AIza…" autocomplete="off" autocapitalize="off" spellcheck="false">
       <div class="acciones" style="justify-content:center"><button type="button" class="btn sec chico" id="probar">🔌 Probar</button></div>
       <button class="btn ancho" data-sig>Siguiente</button>
-      <button class="btn gris ancho" data-saltar-paso style="margin-top:8px">Ahora no</button>`,
+      <button class="btn gris ancho" data-saltar-paso style="margin-top:8px">Ahora no (lo relleno a mano)</button>`,
     instalar: () => {
       const instalada = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
       return `
@@ -115,9 +129,19 @@ export async function mostrarBienvenida() {
       await db.put('goals', g);
       datos.objetivo = g;
     }
-    if (id === 'gemini' && !saltar && val('#apiKey')) {
-      datos.apiKey = val('#apiKey');
-      await saveSettings({ ...(await getSettings()), apiKey: datos.apiKey });
+    if (id === 'gemini') {
+      if (!saltar && val('#apiKey')) {
+        datos.apiKey = val('#apiKey');
+        await saveSettings({ ...(await getSettings()), apiKey: datos.apiKey });
+      }
+      PASOS = datos.apiKey && !saltar ? CON_IA : MANUAL;
+    }
+    if (id === 'situacion') {
+      datos.situacion = val('#b-situacion');
+      if (datos.situacion.length < 20) { toast('Cuéntame un poco más sobre ti y lo que quieres conseguir.'); return false; }
+      // El plan se revisa en una ventana encima; al aplicarlo se pasa al siguiente paso.
+      abrirPlan({ texto: datos.situacion, autoEnviar: true, onAplicado: () => { datos.planAplicado = true; paso++; pintar(); } });
+      return false;
     }
     return true;
   }
@@ -143,6 +167,11 @@ export async function mostrarBienvenida() {
       e.preventDefault();
       await guardarPaso(true);
       paso++; pintar();
+    });
+    capa.querySelector('[data-manual]')?.addEventListener('click', e => {
+      e.preventDefault();
+      PASOS = MANUAL;
+      pintar();
     });
     capa.querySelector('[data-atras]')?.addEventListener('click', () => { paso--; pintar(); });
     capa.querySelector('[data-saltar]').addEventListener('click', () => {
