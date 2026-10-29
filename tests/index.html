@@ -24,7 +24,8 @@
     import { progresoDiario, mediaMovil, mejorRacha, resumenSemana, semanaPendiente, inicioHabito } from '../js/progreso.js';
     import { logrosCumplidos, LOGROS } from '../js/logros.js';
     import { barrasSVG, calendarioHTML } from '../js/grafica.js';
-    import { normalizarPlan, cruzarConExistentes, unirFranjas } from '../js/plan.js';
+    import { normalizarPlan, cruzarConExistentes, unirFranjas, normalizarTurnos } from '../js/plan.js';
+    import { interpretarTexto, tipoTurno } from '../js/interprete.js';
 
     const lista = document.getElementById('lista');
     let ok = 0, ko = 0;
@@ -343,6 +344,97 @@
         { goals: [{ id: 'g1', titulo: 'Leer Más' }, { id: 'g2', titulo: 'Correr', archivado: true }], habits: [{ id: 'h1', titulo: 'Beber agua' }], savingsGoals: [{ id: 's1', nombre: 'japón' }] });
       igual(p.objetivos[0].existente, 'g1'); igual(p.objetivos[1].existente, null, 'archivado no cuenta');
       igual(p.habitos[0].existente, 'h1'); igual(p.metasAhorro[0].existente, 's1');
+    });
+
+    // ---------- Intérprete de texto (sin IA) ----------
+    const HOY_T = '2026-10-29'; // jueves
+    const TEXTO_AMAZON = 'Trabajo en Amazon turnos rotativos dos semanas turno de tarde de 14:50 a 22:55, y por las mañanas de 6:40 a 14:50 trabajo de viernes a martes mañana empiezo por la mañana me queda una semana de turno de mañanas me gustaría en el tiempo que tengo libre a mejorar mis conocimientos informáticos pero de una forma poco a poco para no rallarme';
+    const TEXTO_OFICINA = `Me llamo Dani, tengo 24 años y trabajo de lunes a viernes de 9:00 a 17:00 en una oficina; tardo 30 minutos en llegar. Me levanto a las 7:00 y me acuesto sobre las 23:30. Los martes y jueves tengo clase de guitarra de 19:00 a 20:00.
+Quiero ir al gimnasio 3 veces por semana por la mañana, sacarme el B2 de inglés antes de junio y leer más. Me cuesta ser constante y pierdo mucho tiempo con el móvil por la noche.
+Cobro 1.500 € al mes el día 28, pago 550 € de alquiler y quiero ahorrar 2.000 € para un viaje a Japón en verano.`;
+    const dentroDe = (franjas, desde, hasta) => franjas.every(f => toMin(f.inicio) >= toMin(desde) && toMin(f.fin) <= toMin(hasta));
+
+    prueba('Intérprete: entiende los turnos rotativos del texto de Amazon', () => {
+      const { turnos } = interpretarTexto(TEXTO_AMAZON, { hoy: HOY_T });
+      verdad(turnos, 'no detecta los turnos');
+      igual(JSON.stringify(turnos.horarios.tarde), '{"inicio":"14:50","fin":"22:55"}');
+      igual(JSON.stringify(turnos.horarios.manana), '{"inicio":"06:40","fin":"14:50"}');
+      igual(turnos.inicioCiclo, 4, 'el ciclo empieza en viernes');
+      igual(turnos.patron.filter(x => x === 'tarde').length, 2, 'dos semanas de tarde');
+      igual(tipoTurno(turnos, '2026-10-29'), 'tarde', 'hoy (jueves) sigue en el ciclo de tarde');
+      igual(tipoTurno(turnos, '2026-10-30'), 'manana', 'mañana viernes empieza el turno de mañana');
+      igual(tipoTurno(turnos, '2026-11-03'), 'manana', 'el martes sigue de mañana');
+      igual(tipoTurno(turnos, '2026-11-06'), 'tarde', 'el viernes siguiente vuelve a tarde');
+      igual(tipoTurno(turnos, '2026-11-13'), 'tarde', 'segunda semana de tarde');
+      igual(tipoTurno(turnos, '2026-11-20'), 'manana', 'y otra vez mañana (1 semana de mañana, 2 de tarde)');
+    });
+
+    prueba('Intérprete: horas libres de cada turno sin trabajo, trayecto ni comidas', () => {
+      const { turnos } = interpretarTexto(TEXTO_AMAZON, { hoy: HOY_T });
+      const { tarde, manana } = turnos.disponibilidad;
+      verdad(tarde[4].length && dentroDe(tarde[4], '07:00', '14:05'), `viernes de tarde: ${JSON.stringify(tarde[4])}`);
+      verdad(manana[4].length && dentroDe(manana[4], '15:20', '23:59'), `viernes de mañana: ${JSON.stringify(manana[4])}`);
+      for (const d of [0, 1, 4, 5, 6]) verdad(!tarde[d].some(f => toMin(f.fin) > toMin('14:05')), `día ${d} de tarde choca con el trabajo`);
+      const libre = f => f.reduce((a, x) => a + toMin(x.fin) - toMin(x.inicio), 0);
+      verdad(libre(tarde[2]) > libre(tarde[4]), 'el miércoles (libra) tiene más tiempo libre que un día de trabajo');
+    });
+
+    prueba('Intérprete: objetivo de informática, poco a poco', () => {
+      const r = interpretarTexto(TEXTO_AMAZON, { hoy: HOY_T });
+      const o = r.raw.objetivos;
+      igual(o.length, 1, JSON.stringify(o.map(x => x.titulo)));
+      igual(o[0].titulo, 'Mejorar mis conocimientos de informática');
+      verdad(o[0].horasSemana <= 2, `horas: ${o[0].horasSemana}`);
+      igual(o[0].sesionMin, 30, 'sesiones cortas');
+      verdad(r.raw.preferencias.maxHorasDia <= 1.5, 'poco cada día');
+      verdad(r.supuestos.some(s => s.includes('30 minutos')), 'avisa de que ha supuesto el trayecto');
+      verdad(normalizarTurnos(r.turnos), 'los turnos pasan la validación');
+    });
+
+    prueba('Intérprete: texto con horario fijo, objetivos, hábitos y dinero', () => {
+      const r = interpretarTexto(TEXTO_OFICINA, { hoy: HOY_T });
+      igual(r.turnos, null, 'no hay turnos');
+      const o = Object.fromEntries(r.raw.objetivos.map(x => [x.titulo, x]));
+      verdad(o['Ir al gimnasio'] && o['Sacarme el B2 de inglés'] && o['Leer más'], JSON.stringify(Object.keys(o)));
+      igual(o['Ir al gimnasio'].horasSemana, 3, '3 veces × 1 h'); igual(o['Ir al gimnasio'].momento, 'manana');
+      igual(o['Sacarme el B2 de inglés'].fechaLimite, '2027-05-31', 'antes de junio');
+      igual(o['Leer más'].momento, 'noche');
+      igual(o['Ir al gimnasio'].prioridad, 3, 'lo primero que dice, prioridad alta');
+      igual(r.raw.ingresos.nomina, 1500); igual(r.raw.ingresos.diaCobro, 28);
+      igual(r.raw.gastosFijos[0]?.nombre, 'Alquiler'); igual(r.raw.gastosFijos[0]?.importe, 550);
+      igual(r.raw.metasAhorro[0]?.nombre, 'Viaje a Japón'); igual(r.raw.metasAhorro[0]?.meta, 2000); igual(r.raw.metasAhorro[0]?.fechaLimite, '2027-06-21');
+      igual(r.raw.perfil.nombre, 'Dani');
+      verdad(r.raw.habitos.some(h => h.emoji === '📵') && r.raw.habitos.some(h => h.emoji === '✅'), JSON.stringify(r.raw.habitos));
+      const lunes = r.raw.disponibilidad.filter(f => f.dia === 0), martes = r.raw.disponibilidad.filter(f => f.dia === 1);
+      verdad(!lunes.some(f => toMin(f.fin) > toMin('08:15') && toMin(f.inicio) < toMin('17:30')), `lunes choca con el trabajo: ${JSON.stringify(lunes)}`);
+      verdad(!martes.some(f => toMin(f.inicio) < toMin('20:15') && toMin(f.fin) > toMin('18:45')), `martes choca con la guitarra: ${JSON.stringify(martes)}`);
+    });
+
+    prueba('Intérprete: correcciones escritas con tus palabras', () => {
+      const r = interpretarTexto(TEXTO_OFICINA, { hoy: HOY_T, ajustes: ['el gimnasio mejor por la tarde', 'quita leer', 'me levanto a las 6'] });
+      const titulos = r.raw.objetivos.map(x => x.titulo);
+      verdad(!titulos.includes('Leer más'), `sigue «Leer más»: ${titulos}`);
+      igual(r.raw.objetivos.find(x => x.titulo === 'Ir al gimnasio').momento, 'tarde');
+      verdad(r.raw.disponibilidad.some(f => f.dia === 5 && toMin(f.inicio) <= toMin('06:50')), 'el sábado empieza antes al levantarse a las 6');
+    });
+
+    prueba('Intérprete: horas escritas con palabras y objetivos fuera del catálogo', () => {
+      const r = interpretarTexto('Trabajo de lunes a viernes de 8 y media a 3 de la tarde. Me gustaría aprender a cocinar platos sanos y 2 horas a la semana de inglés', { hoy: HOY_T });
+      verdad(r.raw.perfil.rutina.includes('08:30 a 15:00'), r.raw.perfil.rutina);
+      const t = r.raw.objetivos.map(x => x.titulo);
+      verdad(t.includes('Aprender a cocinar'), JSON.stringify(t));
+      igual(r.raw.objetivos.find(x => x.titulo === 'Aprender inglés')?.horasSemana, 2, JSON.stringify(t));
+    });
+
+    prueba('Turnos: el generador usa las horas libres del turno de cada semana', () => {
+      const turnos = { rotativo: true, patron: ['manana', 'tarde'], referencia: lunes, inicioCiclo: 0,
+        disponibilidad: { manana: Array.from({ length: 7 }, () => [{ inicio: '18:00', fin: '20:00' }]), tarde: Array.from({ length: 7 }, () => [{ inicio: '09:00', fin: '11:00' }]) } };
+      const disp = f => turnos.disponibilidad[tipoTurno(turnos, f)];
+      const g = [{ id: 'A', titulo: 'X', horasSemana: 2, prioridad: 2 }];
+      const s1 = generarSemana({ fecha: lunes, goals: g, blocks: [], disponibilidad: disp, prefs, settings }).nuevos;
+      const s2 = generarSemana({ fecha: addDays(lunes, 7), goals: g, blocks: [], disponibilidad: disp, prefs, settings }).nuevos;
+      verdad(s1.length && s1.every(b => b.inicio >= '18:00'), `semana de mañana: ${s1.map(b => b.inicio)}`);
+      verdad(s2.length && s2.every(b => b.fin <= '11:00'), `semana de tarde: ${s2.map(b => b.inicio)}`);
     });
 
     // ---------- Otros ----------

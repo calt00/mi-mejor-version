@@ -78,6 +78,26 @@ export function normalizarPlan(raw = {}) {
   return { resumen: texto(raw.resumen, 1200), perfil, disponibilidad, preferencias, objetivos, habitos, ingresos, gastosFijos, metasAhorro };
 }
 
+const TIPOS_TURNO = new Set(['manana', 'tarde', 'noche']);
+
+/** Valida los turnos rotativos que devuelve el intérprete. null si no hay o no son válidos. */
+export function normalizarTurnos(t) {
+  if (!t?.rotativo || !Array.isArray(t.patron)) return null;
+  const patron = t.patron.filter(x => TIPOS_TURNO.has(x)).slice(0, 12);
+  const tipos = [...new Set(patron)];
+  if (tipos.length < 2 && patron.length < 2) return null;
+  if (!FECHA.test(t.referencia || '')) return null;
+  const disponibilidad = {}, horarios = {};
+  for (const tipo of tipos) {
+    const dias = t.disponibilidad?.[tipo];
+    if (!Array.isArray(dias) || dias.length !== 7) return null;
+    disponibilidad[tipo] = dias.map(fr => unirFranjas((fr || []).filter(f => hora(f.inicio) && hora(f.fin))));
+    const h = t.horarios?.[tipo];
+    if (h && hora(h.inicio) && hora(h.fin)) horarios[tipo] = { inicio: hora(h.inicio), fin: hora(h.fin) };
+  }
+  return { rotativo: true, patron, referencia: t.referencia, inicioCiclo: Math.round(num(t.inicioCiclo, 0, 6, 0)), horarios, disponibilidad };
+}
+
 /** Marca qué elementos del plan ya existen (mismo título), para actualizarlos en vez de duplicarlos. */
 export function cruzarConExistentes(plan, { goals = [], habits = [], savingsGoals = [], fixedExpenses = [] }) {
   const por = (lista, campo) => new Map(lista.map(x => [clave(x[campo]), x]));

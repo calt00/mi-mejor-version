@@ -1,6 +1,7 @@
 // Cliente de Gemini, contexto personal del coach y acciones propuestas.
 import { db, kvGet } from './db.js';
-import { getSettings, getProfile, getDisponibilidad, getPrefs, getIngresos, areaNombre, CATEGORIAS, catNombre } from './datos.js';
+import { getSettings, getProfile, getDisponibilidad, getPrefs, getIngresos, getTurnos, areaNombre, CATEGORIAS, catNombre } from './datos.js';
+import { tipoTurno } from './interprete.js';
 import { hoyISO, addDays, weekDates, fmtFecha, DIAS, weekday, uid, toMin, fmtEur, nowMin, toHHMM } from './util.js';
 import { resumenMes, estadoMeta } from './finanzas.js';
 
@@ -168,10 +169,17 @@ Lo que ${p.nombre || 'el usuario'} te contó de su vida y sus propósitos (${sit
 
 export async function contextoCompleto() {
   const hoy = hoyISO();
-  const [goals, tasks, blocks, habits, savingsGoals, contributions, expenses, fixed, ingresos, disp, prefs] = await Promise.all([
+  const [goals, tasks, blocks, habits, savingsGoals, contributions, expenses, fixed, ingresos, base, prefs, turnos] = await Promise.all([
     db.all('goals'), db.all('tasks'), db.all('blocks'), db.all('habits'), db.all('savingsGoals'),
-    db.all('contributions'), db.all('expenses'), db.all('fixedExpenses'), getIngresos(), getDisponibilidad(), getPrefs(),
+    db.all('contributions'), db.all('expenses'), db.all('fixedExpenses'), getIngresos(), getDisponibilidad(), getPrefs(), getTurnos(),
   ]);
+  // Con turnos rotativos, la disponibilidad depende del turno de esta semana.
+  const tipoHoy = turnos?.rotativo ? tipoTurno(turnos, hoy) : null;
+  const disp = (tipoHoy && turnos.disponibilidad?.[tipoHoy]) || base;
+  const TXT = { manana: 'mañana', tarde: 'tarde', noche: 'noche' };
+  const lineaTurnos = tipoHoy
+    ? `TURNOS ROTATIVOS: ciclo de ${turnos.patron.map(x => TXT[x]).join(' → ')} (${Object.entries(turnos.horarios || {}).map(([k, v]) => `${TXT[k]} ${v.inicio}-${v.fin}`).join(', ')}). Esta semana está de ${TXT[tipoHoy]}; la que viene, de ${TXT[tipoTurno(turnos, addDays(hoy, 7))]}.\n`
+    : '';
   const semana = new Set(weekDates(hoy));
   const activos = goals.filter(g => !g.archivado);
   const lineaGoal = g => {
@@ -192,7 +200,7 @@ ${activos.length ? activos.map(lineaGoal).join('\n') : '(ninguno todavía)'}
 HORARIO (hoy y próximos 7 días):
 ${proximos.length ? proximos.map(lineaBloque).join('\n') : '(vacío)'}
 
-DISPONIBILIDAD HABITUAL: ${disp.map((fr, i) => `${DIAS[i]} ${fr.map(f => `${f.inicio}-${f.fin}`).join(', ') || 'nada'}`).join(' | ')}
+${lineaTurnos}DISPONIBILIDAD ${tipoHoy ? 'DE ESTA SEMANA' : 'HABITUAL'}: ${disp.map((fr, i) => `${DIAS[i]} ${fr.map(f => `${f.inicio}-${f.fin}`).join(', ') || 'nada'}`).join(' | ')}
 PREFERENCIAS: sesiones de ${prefs.sesionMin} min, descansos de ${prefs.descansoMin} min, máx. ${prefs.maxHorasDia} h/día.
 
 HÁBITOS: ${habits.length ? habits.map(h => `${h.emoji || ''} ${h.titulo} (racha ${racha(h)} días${h.registros.includes(hoy) ? ', hecho hoy' : ''})`).join('; ') : '(ninguno)'}
@@ -384,40 +392,6 @@ Da un diagnóstico breve y cercano (3-5 frases) y entre 3 y 5 acciones concretas
         titulo: { type: 'STRING' }, detalle: { type: 'STRING' }, ahorroMensual: { type: 'NUMBER' } }, required: ['titulo', 'detalle', 'ahorroMensual'] } },
     }, required: ['diagnostico', 'acciones'] },
     { system: await instruccionesBase(), temperatura: 0.5 });
-}
-
-// Convierte lo que el usuario cuenta de su vida en un plan estructurado (se valida en plan.js).
-export async function planDesdeTexto(texto, { ajustes = [], actual = '', onProgreso } = {}) {
-  const hoy = hoyISO();
-  const franja = { type: 'OBJECT', properties: { dia: { type: 'INTEGER', description: '0 lunes … 6 domingo' }, inicio: S('HH:MM'), fin: S('HH:MM') }, required: ['dia', 'inicio', 'fin'] };
-  return generarJSON(
-    `Hoy es ${fmtFecha(hoy)} (${hoy}). Esto es lo que te cuento de mi vida, mi situación y lo que quiero conseguir:
-"""${texto}"""
-${ajustes.length ? `\nCambios que te pido sobre tu propuesta anterior: ${ajustes.join(' | ')}\n` : ''}${actual ? `\nLo que ya tengo en la app (no lo dupliques; si es lo mismo, usa exactamente el mismo título):\n${actual}\n` : ''}
-Con esto, organiza mi app. Devuelve:
-- resumen: 3-5 frases en segunda persona explicando cómo vas a organizarme y por qué (qué priorizas y dónde encaja cada cosa).
-- perfil: nombre (si lo digo), sobreMi, rutina, fortalezas, debilidades y motivacion deducidos de mi texto (vacío si no hay datos).
-- disponibilidad: mis franjas LIBRES habituales de cada día de la semana para dedicar a mis objetivos. Resta trabajo/clases, desplazamientos, comidas, sueño y compromisos fijos que cuente. Deja huecos de descanso realistas; no llenes todo el tiempo libre. Si no doy datos de algún día, supón algo razonable para alguien como yo.
-- preferencias: sesionMin (duración típica de una sesión), descansoMin y maxHorasDia realistas para mí.
-- objetivos: lo que quiero conseguir, cada uno con horas por semana REALISTAS que quepan en mi disponibilidad (la suma no debe superar el 70 % de mis horas libres), prioridad 1-3, mejor momento del día, sesionMin si conviene distinta, fechaLimite si la digo (YYYY-MM-DD), un «porque» con mis palabras y 3-5 primeras tareas muy concretas.
-- habitos: hábitos diarios pequeños que me ayuden (máx. 4), incluidos los que yo mencione.
-- ingresos, gastosFijos y metasAhorro SOLO si menciono dinero (importes en euros). No inventes cifras que no diga.`,
-    { type: 'OBJECT', properties: {
-      resumen: S('Explicación del plan'),
-      perfil: { type: 'OBJECT', properties: { nombre: S(''), sobreMi: S(''), rutina: S(''), fortalezas: S(''), debilidades: S(''), motivacion: S('') } },
-      disponibilidad: { type: 'ARRAY', items: franja },
-      preferencias: { type: 'OBJECT', properties: { sesionMin: N('minutos'), descansoMin: N('minutos'), maxHorasDia: N('horas') } },
-      objetivos: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
-        titulo: S('Corto'), porque: S(''), area: ENUM('Área', ['salud', 'estudio', 'trabajo', 'finanzas', 'personal', 'relaciones', 'ocio', 'hogar']),
-        prioridad: { type: 'INTEGER', description: '1 baja, 2 media, 3 alta' }, horasSemana: N('Horas por semana'),
-        momento: ENUM('Mejor momento', ['cualquiera', 'manana', 'tarde', 'noche']), sesionMin: N('minutos, opcional'), fechaLimite: S('YYYY-MM-DD o vacío'),
-        tareas: { type: 'ARRAY', items: S('Tarea concreta') } }, required: ['titulo', 'area', 'prioridad', 'horasSemana', 'momento'] } },
-      habitos: { type: 'ARRAY', items: { type: 'OBJECT', properties: { titulo: S(''), emoji: S('Un emoji') }, required: ['titulo'] } },
-      ingresos: { type: 'OBJECT', properties: { nomina: N('€ netos al mes'), diaCobro: { type: 'INTEGER' }, extras: N('€ al mes') } },
-      gastosFijos: { type: 'ARRAY', items: { type: 'OBJECT', properties: { nombre: S(''), importe: N('€ al mes'), categoria: ENUM('Categoría', Object.keys(CATEGORIAS)), dia: { type: 'INTEGER' } }, required: ['nombre', 'importe', 'categoria'] } },
-      metasAhorro: { type: 'ARRAY', items: { type: 'OBJECT', properties: { nombre: S(''), emoji: S(''), meta: N('€'), fechaLimite: S('YYYY-MM-DD o vacío'), prioridad: { type: 'INTEGER' } }, required: ['nombre', 'meta'] } },
-    }, required: ['resumen', 'perfil', 'disponibilidad', 'preferencias', 'objetivos', 'habitos'] },
-    { system: 'Eres un planificador personal experto en productividad, hábitos y finanzas personales. Hablas en español de España, de forma cercana. Diseñas planes realistas y sostenibles, nunca sobrecargados.', temperatura: 0.4, onProgreso });
 }
 
 export async function revisionSemanal(resumen) {

@@ -17,8 +17,10 @@ function recortar(intervalos, [a, b]) {
   return out;
 }
 
+// disponibilidad: 7 días (lunes = 0) o una función fecha → 7 días (turnos rotativos).
 export function franjasDia(fecha, disponibilidad) {
-  return (disponibilidad[weekday(fecha)] || []).map(f => [toMin(f.inicio), toMin(f.fin)]).filter(([a, b]) => b > a);
+  const semana = typeof disponibilidad === 'function' ? disponibilidad(fecha) : disponibilidad;
+  return (semana[weekday(fecha)] || []).map(f => [toMin(f.inicio), toMin(f.fin)]).filter(([a, b]) => b > a);
 }
 
 function huecosDia(fecha, disponibilidad, ocupados, descanso) {

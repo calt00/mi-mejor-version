@@ -1,5 +1,6 @@
 // Valores por defecto y acceso a la configuración guardada.
 import { kvGet, kvSet } from './db.js';
+import { tipoTurno } from './interprete.js';
 
 export const AREAS = [
   ['salud', '💪 Salud y deporte'], ['estudio', '📚 Estudio'], ['trabajo', '💼 Trabajo'],
@@ -67,6 +68,17 @@ export const getProfile = getter('profile', DEF_PROFILE);
 export const getPrefs = getter('prefs', DEF_PREFS);
 export const getIngresos = getter('ingresos', DEF_INGRESOS);
 export const getDisponibilidad = async () => kvGet('disponibilidad', DEF_DISPONIBILIDAD);
+
+// Turnos rotativos: { rotativo, patron: ['manana','tarde',…], referencia, inicioCiclo, horarios, disponibilidad: { tipo: [7 días] } }.
+export const getTurnos = () => kvGet('turnos', null);
+export const saveTurnos = v => kvSet('turnos', v);
+
+/** Devuelve una función fecha → horas libres de ese día de la semana (según el turno que toque esa semana). */
+export async function dispPorFecha() {
+  const [base, turnos] = await Promise.all([getDisponibilidad(), getTurnos()]);
+  if (!turnos?.rotativo) return () => base;
+  return fecha => turnos.disponibilidad?.[tipoTurno(turnos, fecha)] || base;
+}
 
 export const saveSettings = v => kvSet('settings', v);
 export const saveProfile = v => kvSet('profile', v);

@@ -1,7 +1,8 @@
 // Pantalla «Horario»: vista día/semana, generador, horario a petición (IA) y disponibilidad.
 import { db } from '../db.js';
-import { getDisponibilidad, saveDisponibilidad, getPrefs, savePrefs, getSettings } from '../datos.js';
-import { esc, sheet, toast, refrescar, uid, hoyISO, addDays, weekDates, fmtFecha, DIAS, toMin } from '../util.js';
+import { getDisponibilidad, saveDisponibilidad, getPrefs, savePrefs, getSettings, getTurnos, saveTurnos, dispPorFecha } from '../datos.js';
+import { tipoTurno, posicionEnPatron } from '../interprete.js';
+import { esc, sheet, toast, refrescar, uid, hoyISO, addDays, weekDates, weekday, fmtFecha, DIAS, toMin, opciones } from '../util.js';
 import { bloqueHTML, conectarBloques, abrirEditorBloque, abrirEnvioIphone, cargando } from './comun.js';
 import { generarSemana, validarBloques, seConserva, ordenarBloques, esImportante } from '../scheduler.js';
 import { horarioPorPeticion, ErrorIA } from '../coach.js';
@@ -9,9 +10,10 @@ import { asignarFrases } from '../iphone.js';
 import { abrirPlan } from './plan.js';
 
 const estado = { modo: 'dia', fecha: hoyISO(), avisos: [] };
+const TURNO_TXT = { manana: 'mañana', tarde: 'tarde', noche: 'noche' };
 
 export async function render(root) {
-  const [goals, blocks] = await Promise.all([db.all('goals'), db.all('blocks')]);
+  const [goals, blocks, turnos] = await Promise.all([db.all('goals'), db.all('blocks'), getTurnos()]);
   const goalsById = Object.fromEntries(goals.map(g => [g.id, g]));
   const hoy = hoyISO();
   const semana = weekDates(estado.fecha);
@@ -35,6 +37,7 @@ export async function render(root) {
       <div class="centro"><b>${titulo}</b>${!fechas.includes(hoy) ? '<br><a href="#" id="ir-hoy" class="mini">Volver a hoy</a>' : ''}</div>
       <button class="btn-icon" data-mover="1" aria-label="Siguiente">›</button>
     </div>
+    ${turnos?.rotativo ? `<p class="mini centro" style="margin:-6px 0 10px">🏭 ${estado.modo === 'dia' ? 'Ese día' : 'Esa semana'} estás de turno de <b>${TURNO_TXT[tipoTurno(turnos, estado.fecha)]}</b></p>` : ''}
     <div class="chips">
       <button class="chip activa" id="plan">🧠 Mi plan a medida</button>
       <button class="chip" id="pedir">✨ Pídeme tu horario</button>
@@ -66,7 +69,7 @@ export async function render(root) {
 }
 
 async function generar() {
-  const [goals, blocks, disponibilidad, prefs, settings] = await Promise.all([db.all('goals'), db.all('blocks'), getDisponibilidad(), getPrefs(), getSettings()]);
+  const [goals, blocks, disponibilidad, prefs, settings] = await Promise.all([db.all('goals'), db.all('blocks'), dispPorFecha(), getPrefs(), getSettings()]);
   const fecha = estado.fecha < hoyISO() ? hoyISO() : estado.fecha;
   const { nuevos, borrar, avisos } = generarSemana({ fecha, goals, blocks, disponibilidad, prefs, settings });
   if (borrar.length && !confirm(`Se reorganizarán ${borrar.length} bloques no fijados de esta semana. Los fijados (📌) y los hechos se mantienen. ¿Continuar?`)) return;
@@ -105,7 +108,7 @@ export async function abrirPeticionHorario(textoInicial = '') {
     res.innerHTML = cargando('Organizando tu horario…');
     form.querySelector('button.btn').disabled = true;
     try {
-      const [goals, blocks, disponibilidad, settings] = await Promise.all([db.all('goals'), db.all('blocks'), getDisponibilidad(), getSettings()]);
+      const [goals, blocks, disponibilidad, settings] = await Promise.all([db.all('goals'), db.all('blocks'), dispPorFecha(), getSettings()]);
       const hoy = hoyISO(), limite = addDays(hoy, 14);
       const fijos = blocks.filter(b => b.fecha >= hoy && b.fecha <= limite && seConserva(b));
       const r = await horarioPorPeticion(peticion, fijos);
@@ -157,14 +160,30 @@ export async function abrirPeticionHorario(textoInicial = '') {
 }
 
 export async function editarDisponibilidad() {
-  const [disp, prefs] = await Promise.all([getDisponibilidad(), getPrefs()]);
-  const copia = disp.map(d => d.map(f => ({ ...f })));
+  const [disp, prefs, turnos] = await Promise.all([getDisponibilidad(), getPrefs(), getTurnos()]);
+  const clonar = semana => semana.map(d => d.map(f => ({ ...f })));
+  // Con turnos rotativos se edita la plantilla de cada turno por separado.
+  const rota = turnos?.rotativo && turnos.disponibilidad;
+  const tipos = rota ? [...new Set(turnos.patron)] : [];
+  const plantillas = rota ? Object.fromEntries(tipos.map(tp => [tp, clonar(turnos.disponibilidad[tp] || disp)])) : null;
+  const hoy = hoyISO();
+  let tipoEdit = rota ? tipoTurno(turnos, hoy) : null;
+  let posActual = rota ? posicionEnPatron(turnos, hoy) : 0;
+  let copia = rota ? plantillas[tipoEdit] : clonar(disp);
   const { el, close } = sheet('Disponibilidad', '<div id="cont"></div>');
   const cont = el.querySelector('#cont');
+  const etiquetas = rota ? turnos.patron.map((tp, i) => {
+    const n = turnos.patron.slice(0, i + 1).filter(x => x === tp).length, total = turnos.patron.filter(x => x === tp).length;
+    return `${TURNO_TXT[tp][0].toUpperCase()}${TURNO_TXT[tp].slice(1)}${total > 1 ? ` (${n}.ª semana)` : ''}`;
+  }) : [];
 
   function pintar() {
     cont.innerHTML = `
       <p class="sub">Tus horas <b>libres</b> para dedicar a tus objetivos cada día (fuera de trabajo, clases, comidas y sueño).</p>
+      ${rota ? `<div class="card" style="padding:12px">
+        <label class="campo" style="margin-bottom:8px"><span>🏭 Esta semana estoy de</span><select id="turno-actual">${opciones(etiquetas.map((e, i) => [i, e]), posActual)}</select></label>
+        <div class="seg" style="margin:0">${tipos.map(tp => `<button type="button" data-plantilla="${tp}" class="${tp === tipoEdit ? 'activa' : ''}">Semanas de ${TURNO_TXT[tp]}</button>`).join('')}</div>
+      </div>` : ''}
       ${DIAS.map((d, i) => `<div class="card" style="padding:12px">
         <div class="fila sep" style="margin-bottom:6px"><b>${d}</b>
           <span class="fila" style="gap:6px">${i > 0 ? `<button type="button" class="btn gris chico" data-copiar="${i}">= ${DIAS[i - 1].slice(0, 3)}</button>` : ''}
@@ -193,9 +212,19 @@ export async function editarDisponibilidad() {
     cont.querySelectorAll('[data-quitar]').forEach(b => b.addEventListener('click', () => {
       const [i, j] = b.dataset.quitar.split('-').map(Number); copia[i].splice(j, 1); pintar();
     }));
+    cont.querySelectorAll('[data-plantilla]').forEach(b => b.addEventListener('click', () => { tipoEdit = b.dataset.plantilla; copia = plantillas[tipoEdit]; pintar(); }));
+    cont.querySelector('#turno-actual')?.addEventListener('change', e => { posActual = Number(e.target.value); });
     cont.querySelector('#guardar').addEventListener('click', async () => {
-      for (const d of copia) for (const f of d) if (toMin(f.fin) <= toMin(f.inicio)) return toast(`Revisa la franja ${f.inicio}–${f.fin}: el fin debe ser posterior al inicio.`);
-      await saveDisponibilidad(copia.map(d => d.sort((a, b) => a.inicio.localeCompare(b.inicio))));
+      const semanas = rota ? Object.values(plantillas) : [copia];
+      for (const s of semanas) for (const d of s) for (const f of d) if (toMin(f.fin) <= toMin(f.inicio)) return toast(`Revisa la franja ${f.inicio}–${f.fin}: el fin debe ser posterior al inicio.`);
+      const ordenar = s => s.map(d => d.sort((a, b) => a.inicio.localeCompare(b.inicio)));
+      if (rota) {
+        // El turno elegido para esta semana fija dónde está el ciclo.
+        const inicio = addDays(hoy, -((weekday(hoy) - turnos.inicioCiclo + 7) % 7));
+        const nuevos = { ...turnos, referencia: addDays(inicio, -7 * posActual), disponibilidad: Object.fromEntries(Object.entries(plantillas).map(([k, v]) => [k, ordenar(v)])) };
+        await saveTurnos(nuevos);
+        await saveDisponibilidad(nuevos.disponibilidad[nuevos.patron[posActual]]);
+      } else await saveDisponibilidad(ordenar(copia));
       await savePrefs({ sesionMin: Number(cont.querySelector('#sesion').value) || 60, descansoMin: Number(cont.querySelector('#descanso').value) || 0, maxHorasDia: Number(cont.querySelector('#max').value) || 4 });
       close(); toast('Disponibilidad guardada. Pulsa «Generar semana» para aplicarla.');
     });

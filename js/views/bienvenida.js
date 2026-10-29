@@ -16,15 +16,16 @@ const PRESETS = {
     v: [...Array(5).fill([f('20:00', '22:00')]), [f('10:00', '14:00'), f('16:00', '20:00')], [f('10:00', '14:00'), f('16:00', '20:00')]] },
 };
 
-// Con clave de Gemini, la app monta el plan a partir de tu texto; sin ella, se rellena paso a paso.
-const CON_IA = ['hola', 'gemini', 'situacion', 'instalar'];
-const MANUAL = ['hola', 'gemini', 'nombre', 'horas', 'objetivo', 'instalar'];
+// La app monta el plan a partir de tu texto (sin IA); también se puede rellenar paso a paso.
+// La clave de Gemini es opcional y solo hace falta para el coach.
+const CON_TEXTO = ['hola', 'situacion', 'gemini', 'instalar'];
+const MANUAL = ['hola', 'nombre', 'horas', 'objetivo', 'gemini', 'instalar'];
 
 export async function mostrarBienvenida() {
   if (document.querySelector('.bienvenida')) return;
   const [perfil, settings, situacion] = await Promise.all([getProfile(), getSettings(), kvGet('miSituacion')]);
   const datos = { nombre: perfil.nombre, preset: 'tardes', objetivo: null, apiKey: settings.apiKey, situacion: situacion?.texto || '', planAplicado: false };
-  let PASOS = CON_IA;
+  let PASOS = CON_TEXTO;
   const capa = document.createElement('div');
   capa.className = 'bienvenida';
   capa.setAttribute('role', 'dialog');
@@ -49,12 +50,12 @@ export async function mostrarBienvenida() {
       <div class="b-ico">🌱</div>
       <h2>¡Hola! Empieza tu mejor versión</h2>
       <p class="sub">Esta app te ayuda a <b>cumplir tus objetivos</b>, organizar tu <b>horario</b>, <b>ahorrar</b> con tu cerdito y tener un <b>coach</b> que te conoce.</p>
-      <p class="sub">Solo tienes que <b>contarme tu situación y lo que quieres conseguir</b>, con tus palabras. Yo organizo tus objetivos, tus horas libres, tus hábitos y tu horario.</p>
+      <p class="sub">Solo tienes que <b>contarme tu situación y lo que quieres conseguir</b>, con tus palabras. La app lo entiende y organiza tus objetivos, tus horas libres (también si trabajas a turnos), tus hábitos y tu horario. Sin claves ni registros.</p>
       <button class="btn ancho" data-sig>Empezar</button>`,
     situacion: () => `
       <div class="b-ico">📝</div>
       <h2>Cuéntame tu vida</h2>
-      <p class="sub">Como se lo contarías a un amigo. Por ejemplo: a qué te dedicas y tu horario, a qué hora te levantas y te acuestas, qué quieres conseguir y para cuándo, qué te cuesta… y si quieres, tu sueldo y para qué ahorras.</p>
+      <p class="sub">Como se lo contarías a un amigo: tu trabajo y tu horario (o tus turnos), qué días libras, cuánto tardas en llegar, a qué hora te levantas y te acuestas, qué quieres conseguir y cómo (por ejemplo, «poco a poco»)… y si quieres, tu sueldo y para qué ahorras.</p>
       <textarea id="b-situacion" style="min-height:200px" placeholder="Ej.: Trabajo de lunes a viernes de 9 a 17 h y tardo 30 min en llegar. Me levanto a las 7… Quiero sacarme el B2 de inglés antes de junio, ir al gimnasio 3 días…">${esc(datos.situacion)}</textarea>
       <button class="btn ancho" data-sig>✨ Crear mi plan</button>
       <button class="btn gris ancho" data-manual>Prefiero rellenarlo paso a paso</button>`,
@@ -85,8 +86,8 @@ export async function mostrarBienvenida() {
       <button class="btn gris ancho" data-saltar-paso style="margin-top:8px">Lo creo más tarde</button>`,
     gemini: () => `
       <div class="b-ico">🤖</div>
-      <h2>Activa la IA (gratis)</h2>
-      <p class="sub">Tu plan a medida y tu coach usan Gemini, la IA gratuita de Google. Necesitas una «clave» (API key):</p>
+      <h2>Activa tu coach (opcional)</h2>
+      <p class="sub">Tu plan ya está hecho sin IA. Si además quieres chatear con un coach que te conoce, usa Gemini, la IA gratuita de Google. Necesitas una «clave» (API key):</p>
       <ol class="sub" style="text-align:left;padding-left:20px">
         <li>Abre <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> e inicia sesión con tu cuenta de Google.</li>
         <li>Pulsa «Create API key» y cópiala.</li>
@@ -95,7 +96,7 @@ export async function mostrarBienvenida() {
       <input id="apiKey" type="password" value="${esc(datos.apiKey)}" placeholder="AIza…" autocomplete="off" autocapitalize="off" spellcheck="false">
       <div class="acciones" style="justify-content:center"><button type="button" class="btn sec chico" id="probar">🔌 Probar</button></div>
       <button class="btn ancho" data-sig>Siguiente</button>
-      <button class="btn gris ancho" data-saltar-paso style="margin-top:8px">Ahora no (lo relleno a mano)</button>`,
+      <button class="btn gris ancho" data-saltar-paso style="margin-top:8px">Ahora no</button>`,
     instalar: () => {
       const instalada = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
       return `
@@ -134,7 +135,6 @@ export async function mostrarBienvenida() {
         datos.apiKey = val('#apiKey');
         await saveSettings({ ...(await getSettings()), apiKey: datos.apiKey });
       }
-      PASOS = datos.apiKey && !saltar ? CON_IA : MANUAL;
     }
     if (id === 'situacion') {
       datos.situacion = val('#b-situacion');
