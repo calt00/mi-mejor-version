@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mi Mejor Versión</title>
+  <meta name="description" content="Tus objetivos, tu horario, tu ahorro y tu coach personal.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Mejor Versión">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="top">
+    <h1 id="titulo">Hoy</h1>
+    <a href="#perfil" class="avatar" id="avatar" aria-label="Perfil y ajustes">🙂</a>
+  </header>
+
+  <main id="vista" aria-live="polite"></main>
+
+  <nav class="tabs" aria-label="Secciones">
+    <a href="#hoy" data-ruta="hoy">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
+      <span>Hoy</span></a>
+    <a href="#objetivos" data-ruta="objetivos">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>
+      <span>Objetivos</span></a>
+    <a href="#horario" data-ruta="horario">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+      <span>Horario</span></a>
+    <a href="#ahorro" data-ruta="ahorro">
+      <svg viewBox="0 0 24 24"><path d="M5 11c0-3.5 3.6-6 8-6s7 2.5 7 6c0 2-1 3.6-2.6 4.6L17 19h-3l-.4-1.6h-3.2L10 19H7l-.5-2.6C5.6 15.6 5 13.5 5 11z"/><path d="M3 10c0 1.2.8 2 2 2M10.5 5.3c.3-1 1.3-1.8 2.5-1.8s2.2.8 2.5 1.8"/><circle cx="16" cy="10" r=".6"/></svg>
+      <span>Ahorro</span></a>
+    <a href="#coach" data-ruta="coach">
+      <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01"/></svg>
+      <span>Coach</span></a>
+  </nav>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

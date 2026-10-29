@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Datos de ejemplo · Mi Mejor Versión</title>
+  <style>body { font: 16px system-ui, sans-serif; padding: 24px; } button { font: inherit; padding: 10px 16px; }</style>
+</head>
+<body>
+  <h1>Datos de ejemplo</h1>
+  <p>⚠️ Esto <b>borra todos tus datos</b> y carga datos de prueba. Úsalo solo para probar la app.</p>
+  <button id="cargar">Cargar datos de ejemplo</button>
+  <p id="estado"></p>
+  <script type="module">
+    import { db, kvSet, STORES } from '../js/db.js';
+    import { hoyISO, addDays, uid, prevMonthKey, monthKey } from '../js/util.js';
+    import { generarSemana } from '../js/scheduler.js';
+    import { getDisponibilidad } from '../js/datos.js';
+    import { FRASES } from '../js/frases.js';
+
+    async function cargar() {
+      for (const s of STORES) await db.clear(s);
+      const hoy = hoyISO();
+      await kvSet('inicioApp', addDays(hoy, -100));
+      await kvSet('profile', { nombre: 'Demo', sobreMi: 'Persona de ejemplo para probar la app.', rutina: 'Trabajo de 9 a 17 h.', fortalezas: 'Constancia', debilidades: 'El móvil', motivacion: 'Sentirme mejor', tono: 'Cercano y directo' });
+      await kvSet('settings', { apiKey: '', modelo: 'gemini-flash-latest', tema: 'auto', importantes: 'alta', nombreAtajo: 'MMV Horario' });
+      await kvSet('prefs', { sesionMin: 60, descansoMin: 10, maxHorasDia: 3 });
+      await kvSet('disponibilidad', Array.from({ length: 7 }, (_, i) => i < 5 ? [{ inicio: '07:00', fin: '08:30' }, { inicio: '17:30', fin: '22:30' }] : [{ inicio: '09:00', fin: '13:00' }, { inicio: '17:00', fin: '21:00' }]));
+
+      const goals = [
+        { id: 'g1', titulo: 'Aprender inglés (B2)', porque: 'Para optar a mejores trabajos', area: 'estudio', prioridad: 3, horasSemana: 4, momento: 'tarde', creado: hoy, archivado: false },
+        { id: 'g2', titulo: 'Ir al gimnasio', porque: 'Tener más energía', area: 'salud', prioridad: 2, horasSemana: 3, momento: 'manana', creado: hoy, archivado: false },
+        { id: 'g3', titulo: 'Leer 12 libros', porque: 'Aprender cada día', area: 'personal', prioridad: 1, horasSemana: 2, sesionMin: 30, momento: 'noche', creado: hoy, archivado: false },
+      ];
+      await db.putMany('goals', goals);
+      await db.putMany('tasks', [
+        { id: uid(), goalId: 'g1', titulo: 'Hacer test de nivel', hecho: true, creado: 1 },
+        { id: uid(), goalId: 'g1', titulo: 'Elegir curso online', hecho: false, creado: 2 },
+        { id: uid(), goalId: 'g2', titulo: 'Apuntarme al gimnasio', hecho: true, creado: 3 },
+      ]);
+
+      // Bloques de hoy (uno hecho) + semana generada.
+      const ahora = new Date().getHours();
+      const h = n => String(Math.max(0, Math.min(23, n))).padStart(2, '0');
+      const deHoy = [
+        { id: uid(), fecha: hoy, inicio: `${h(ahora - 2)}:00`, fin: `${h(ahora - 1)}:00`, titulo: 'Ir al gimnasio', goalId: 'g2', fijado: true, hecho: true, importante: false, frase: FRASES[1], origen: 'manual' },
+        { id: uid(), fecha: hoy, inicio: `${h(ahora)}:00`, fin: `${h(ahora)}:50`, titulo: 'Aprender inglés (B2)', goalId: 'g1', fijado: true, hecho: false, importante: true, frase: FRASES[0], origen: 'manual' },
+        { id: uid(), fecha: hoy, inicio: `${h(ahora + 1)}:00`, fin: `${h(ahora + 1)}:30`, titulo: 'Leer 12 libros', goalId: 'g3', fijado: true, hecho: false, importante: false, frase: FRASES[5], origen: 'manual' },
+      ];
+      await db.putMany('blocks', deHoy);
+      const { nuevos } = generarSemana({ fecha: addDays(hoy, 1), goals, blocks: deHoy, disponibilidad: await getDisponibilidad(), prefs: { sesionMin: 60, descansoMin: 10, maxHorasDia: 3 }, settings: { importantes: 'alta' } });
+      nuevos.forEach((b, i) => { b.frase = FRASES[(i * 7) % FRASES.length]; });
+      await db.putMany('blocks', nuevos);
+
+      const dias = n => Array.from({ length: n }, (_, i) => addDays(hoy, -i));
+      await db.putMany('habits', [
+        { id: uid(), titulo: 'Beber 2 L de agua', emoji: '💧', registros: dias(6) },
+        { id: uid(), titulo: 'Leer 10 páginas', emoji: '📖', registros: dias(3).slice(1) },
+        { id: uid(), titulo: 'Meditar', emoji: '🧘', registros: [] },
+      ]);
+
+      // Finanzas
+      await kvSet('ingresos', { nomina: 1500, diaCobro: 28, extras: 0 });
+      await db.putMany('fixedExpenses', [
+        { id: uid(), nombre: 'Alquiler', importe: 550, categoria: 'vivienda', dia: 1 },
+        { id: uid(), nombre: 'Abono transporte', importe: 40, categoria: 'transporte', dia: 1 },
+        { id: uid(), nombre: 'Spotify', importe: 11.99, categoria: 'suscripciones', dia: 5, suscripcion: true },
+        { id: uid(), nombre: 'Netflix', importe: 13.99, categoria: 'suscripciones', dia: 12, suscripcion: true },
+        { id: uid(), nombre: 'Gimnasio', importe: 35, categoria: 'deporte', dia: 3 },
+      ]);
+      const mk = monthKey(hoy);
+      const gastos = [];
+      for (const [n, rest] of [[1, 90], [2, 110], [3, 100]]) {
+        const m = prevMonthKey(mk, n);
+        gastos.push({ importe: rest, categoria: 'restaurantes', fecha: `${m}-12` }, { importe: 180, categoria: 'supermercado', fecha: `${m}-08` });
+      }
+      gastos.push({ importe: 85, categoria: 'restaurantes', fecha: addDays(hoy, -3), nota: 'Cena con amigos' }, { importe: 62, categoria: 'restaurantes', fecha: addDays(hoy, -8) },
+        { importe: 64.3, categoria: 'supermercado', fecha: addDays(hoy, -1), nota: 'Compra semanal' }, { importe: 29.99, categoria: 'compras', fecha: addDays(hoy, -5), nota: 'Camiseta' });
+      for (let i = 0; i < 9; i++) gastos.push({ importe: 2.2, categoria: 'cafe', fecha: addDays(hoy, -i * 2), nota: 'Café' });
+      await db.putMany('expenses', gastos.filter(g => g.fecha <= hoy).map((g, i) => ({ id: uid() + i, creado: i, nota: '', ...g })));
+
+      await db.putMany('savingsGoals', [
+        { id: 's1', nombre: 'Viaje a Japón', emoji: '🗾', meta: 2400, fechaLimite: addDays(hoy, 300), prioridad: 3, creado: addDays(hoy, -90) },
+        { id: 's2', nombre: 'Fondo de emergencia', emoji: '🛟', meta: 2000, prioridad: 2, creado: addDays(hoy, -90) },
+        { id: 's3', nombre: 'Moto', emoji: '🛵', meta: 500, prioridad: 1, creado: addDays(hoy, -90) },
+        { id: 's4', nombre: 'Portátil nuevo', emoji: '💻', meta: 1000, prioridad: 1, creado: addDays(hoy, -20) },
+      ]);
+      await db.putMany('contributions', [
+        { id: uid(), goalId: 's1', importe: 300, fecha: addDays(hoy, -60) }, { id: uid(), goalId: 's1', importe: 350, fecha: addDays(hoy, -20) },
+        { id: uid(), goalId: 's2', importe: 1700, fecha: addDays(hoy, -40) },
+        { id: uid(), goalId: 's3', importe: 500, fecha: addDays(hoy, -30) },
+        { id: uid(), goalId: 's4', importe: 90, fecha: addDays(hoy, -2) },
+      ]);
+      await db.putMany('chat', [
+        { id: 'm1', rol: 'user', texto: 'No sé por dónde empezar hoy. ¿Qué hago primero?', ts: 1 },
+        { id: 'm2', rol: 'model', texto: 'Empieza por lo que más te acerca a tu meta: **inglés**.\n\n1. Pon un temporizador de 25 min\n2. Haz una lección del curso\n3. Apunta 5 palabras nuevas\n\n¿Te añado un bloque ahora?', ts: 2,
+          acciones: [{ id: 'a1', name: 'crear_bloque', args: { fecha: hoy, inicio: '19:00', fin: '19:30', titulo: 'Inglés: lección 1' }, estado: 'pendiente' }] },
+      ]);
+      document.getElementById('estado').textContent = '✅ Datos de ejemplo cargados. Abre la app.';
+      document.title = 'DEMO OK';
+    }
+    document.getElementById('cargar').addEventListener('click', () => cargar().catch(e => { document.getElementById('estado').textContent = '❌ ' + e.message; document.title = 'DEMO ERROR'; }));
+    if (location.search.includes('auto')) cargar().catch(e => { document.title = 'DEMO ERROR ' + e.message; });
+  </script>
+</body>
+</html>

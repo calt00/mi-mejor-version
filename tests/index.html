@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pruebas · Mi Mejor Versión</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 20px; background: #f2f2f7; color: #111; }
+    h1 { font-size: 22px; } li { margin: 4px 0; } .ok { color: #1a8f3a; } .ko { color: #d70015; font-weight: 700; }
+    #resumen { font-size: 18px; font-weight: 700; margin: 12px 0; }
+    pre { white-space: pre-wrap; background: #fff; padding: 8px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Pruebas de la lógica</h1>
+  <div id="resumen">Ejecutando…</div>
+  <ul id="lista"></ul>
+  <script type="module">
+    import { generarSemana, validarBloques } from '../js/scheduler.js';
+    import { resumenMes, estadoMeta, recomendaciones, regla503020, evaluarReto } from '../js/finanzas.js';
+    import { etapa, escala } from '../js/cerdito.js';
+    import { miniMarkdown, toMin, addDays, weekStart, hoyISO, weekday } from '../js/util.js';
+    import { construirPayload } from '../js/iphone.js';
+
+    const lista = document.getElementById('lista');
+    let ok = 0, ko = 0;
+    function prueba(nombre, fn) {
+      const li = document.createElement('li');
+      try { fn(); li.className = 'ok'; li.textContent = `✓ ${nombre}`; ok++; }
+      catch (e) { li.className = 'ko'; li.innerHTML = `✗ ${nombre}<pre>${e.message}</pre>`; ko++; console.error(nombre, e); }
+      lista.appendChild(li);
+    }
+    const igual = (a, b, msg = '') => { if (a !== b) throw new Error(`${msg} esperado ${JSON.stringify(b)}, obtenido ${JSON.stringify(a)}`); };
+    const cerca = (a, b, tol = 0.01, msg = '') => { if (Math.abs(a - b) > tol) throw new Error(`${msg} esperado ≈${b}, obtenido ${a}`); };
+    const verdad = (c, msg) => { if (!c) throw new Error(msg); };
+
+    // ---------- Finanzas ----------
+    const base = {
+      hoy: '2026-10-15', ingresos: { nomina: 1500, diaCobro: 1, extras: 0 },
+      fixed: [{ id: 'f1', nombre: 'Alquiler', importe: 600, categoria: 'vivienda' }, { id: 'f2', nombre: 'Netflix', importe: 100, categoria: 'suscripciones', suscripcion: true }],
+      expenses: [{ id: 'e1', importe: 100, categoria: 'supermercado', fecha: '2026-10-03' }, { id: 'e2', importe: 50, categoria: 'ocio', fecha: '2026-10-10' }],
+      savingsGoals: [], contributions: [{ id: 'c1', goalId: 'm1', importe: 200, fecha: '2026-10-05' }], reto: null, sobrantesRepartidos: [], inicioApp: '2026-10-01',
+    };
+
+    prueba('Resumen del mes: disponible y €/día', () => {
+      const r = resumenMes(base);
+      igual(r.ingresos, 1500); igual(r.fijos, 700); igual(r.variables, 150); igual(r.aportado, 200);
+      igual(r.disponible, 450, 'disponible');
+      igual(r.diasRestantes, 17, 'días restantes');
+      cerca(r.porDia, 450 / 17, 0.001, '€/día');
+    });
+
+    prueba('Regla 50/30/20 clasifica necesidades y caprichos', () => {
+      const g = regla503020(base);
+      igual(g.necesidades, 700, 'necesidades'); igual(g.deseos, 150, 'deseos');
+      cerca(g.pct.ahorro, 200 / 1500 * 100, 0.01);
+    });
+
+    prueba('Meta sin aportaciones con fecha → atrasada y cuota mensual', () => {
+      const m = { id: 'm9', nombre: 'Viaje', meta: 1000, fechaLimite: '2027-08-15', creado: '2026-10-15', prioridad: 2 };
+      const e = estadoMeta(m, [], '2026-10-15');
+      igual(e.estado, 'atrasado'); igual(e.ahorrado, 0); igual(e.pct, 0);
+      cerca(e.necesarioMes, 1000 / (304 / 30.44), 1, 'necesario/mes');
+    });
+
+    prueba('Meta completada al llegar al 100 %', () => {
+      const m = { id: 'm1', nombre: 'Moto', meta: 200, creado: '2026-10-01' };
+      igual(estadoMeta(m, base.contributions, '2026-10-15').estado, 'completada');
+    });
+
+    prueba('Recomendación: categoría +40 % sobre la media de 3 meses', () => {
+      const d = structuredClone(base);
+      d.savingsGoals = [{ id: 'm2', nombre: 'Coche', meta: 6000, creado: '2026-06-01', prioridad: 3 }];
+      d.contributions = [{ id: 'c', goalId: 'm2', importe: 300, fecha: '2026-09-01' }];
+      for (const mes of ['2026-07', '2026-08', '2026-09']) d.expenses.push({ id: mes, importe: 100, categoria: 'restaurantes', fecha: `${mes}-10` });
+      d.expenses.push({ id: 'r', importe: 140, categoria: 'restaurantes', fecha: '2026-10-12' });
+      const rec = recomendaciones(d).find(r => r.titulo.startsWith('Restaurantes'));
+      verdad(rec, 'no aparece la recomendación de Restaurantes');
+      verdad(rec.titulo.includes('+40 %'), `título: ${rec.titulo}`);
+      verdad(rec.texto.includes('480'), `ahorro anual en texto: ${rec.texto}`);
+      verdad(/adelanta tu meta «Coche»|llegarías a tu meta «Coche»/.test(rec.texto), `sin adelanto de meta: ${rec.texto}`);
+    });
+
+    prueba('Recomendación: meta atrasada propone aportar', () => {
+      const d = structuredClone(base);
+      d.savingsGoals = [{ id: 'm3', nombre: 'Japón', meta: 3000, fechaLimite: '2027-04-15', creado: '2026-10-01', prioridad: 3 }];
+      const rec = recomendaciones(d).find(r => r.accion?.tipo === 'aportar');
+      verdad(rec && rec.titulo.includes('Japón'), 'no hay recomendación de aportar a Japón');
+      verdad(rec.accion.importe > 0, 'importe a aportar');
+    });
+
+    prueba('Recomendación: suscripciones y fondo de emergencia', () => {
+      const recs = recomendaciones(base);
+      verdad(recs.some(r => r.titulo.includes('suscripciones')), 'falta suscripciones');
+      const fondo = recs.find(r => r.accion?.tipo === 'crear-meta');
+      verdad(fondo, 'falta fondo de emergencia');
+      igual(fondo.accion.meta, 2100, 'fondo = 3 × fijos');
+    });
+
+    prueba('Recomendación: sobrante del mes anterior se reparte', () => {
+      const d = structuredClone(base);
+      d.inicioApp = '2026-09-01';
+      d.savingsGoals = [{ id: 'a', nombre: 'A', meta: 5000, prioridad: 3, creado: '2026-09-01' }, { id: 'b', nombre: 'B', meta: 5000, prioridad: 1, creado: '2026-09-01' }];
+      d.expenses.push({ id: 's', importe: 400, categoria: 'supermercado', fecha: '2026-09-10' });
+      const rec = recomendaciones(d).find(r => r.accion?.tipo === 'repartir-sobrante');
+      verdad(rec, 'no aparece el sobrante');
+      const total = rec.accion.reparto.reduce((a, x) => a + x.importe, 0);
+      igual(total, 400, 'reparto total (1500 − 700 − 400)');
+      verdad(rec.accion.reparto[0].importe > rec.accion.reparto[1].importe, 'más a la meta prioritaria');
+    });
+
+    prueba('Sin nómina solo pide configurarla', () => {
+      const d = structuredClone(base); d.ingresos.nomina = 0;
+      const recs = recomendaciones(d);
+      igual(recs.length, 1); igual(recs[0].accion.tipo, 'config-nomina');
+    });
+
+    prueba('Reto semanal: cumplido y roto', () => {
+      const reto = { categoria: 'delivery', inicio: '2026-10-01', ahorroEstimado: 20 };
+      igual(evaluarReto(reto, [], '2026-10-09').cumplido, true);
+      igual(evaluarReto(reto, [{ categoria: 'delivery', importe: 12, fecha: '2026-10-03' }], '2026-10-05').roto, true);
+      igual(evaluarReto(reto, [], '2026-10-04').terminado, false);
+    });
+
+    // ---------- Cerdito ----------
+    prueba('Cerdito: etapas y escala', () => {
+      [[0, 0], [0.19, 0], [0.2, 1], [0.45, 2], [0.6, 3], [0.85, 4], [0.999, 4], [1, 5], [1.5, 5]].forEach(([p, e]) => igual(etapa(p), e, `pct ${p}`));
+      cerca(escala(0), 0.6); cerca(escala(1), 1.4); cerca(escala(2), 1.4); cerca(escala(0.5), 1.0);
+    });
+
+    // ---------- Horario ----------
+    const lunes = addDays(weekStart(hoyISO()), 7);
+    const disp = Array.from({ length: 7 }, () => [{ inicio: '18:00', fin: '22:00' }]);
+    const prefs = { sesionMin: 60, descansoMin: 10, maxHorasDia: 3 };
+    const settings = { importantes: 'alta' };
+    const goals = [
+      { id: 'A', titulo: 'Inglés', horasSemana: 4, prioridad: 3, momento: 'cualquiera' },
+      { id: 'B', titulo: 'Leer', horasSemana: 2, prioridad: 1, momento: 'noche' },
+    ];
+    const minutos = (bs, id) => bs.filter(b => b.goalId === id).reduce((a, b) => a + toMin(b.fin) - toMin(b.inicio), 0);
+    const sinSolapes = bs => {
+      for (const a of bs) for (const b of bs) if (a !== b && a.fecha === b.fecha && toMin(a.inicio) < toMin(b.fin) && toMin(b.inicio) < toMin(a.fin)) return false;
+      return true;
+    };
+
+    prueba('Generador: reparte todas las horas sin solapes y dentro de la disponibilidad', () => {
+      const { nuevos, avisos } = generarSemana({ fecha: lunes, goals, blocks: [], disponibilidad: disp, prefs, settings });
+      igual(minutos(nuevos, 'A'), 240, 'Inglés'); igual(minutos(nuevos, 'B'), 120, 'Leer');
+      igual(avisos.length, 0, 'avisos');
+      verdad(sinSolapes(nuevos), 'hay solapes');
+      verdad(nuevos.every(b => toMin(b.inicio) >= toMin('18:00') && toMin(b.fin) <= toMin('22:00')), 'fuera de disponibilidad');
+      verdad(nuevos.filter(b => b.goalId === 'A').every(b => b.importante), 'prioridad alta = alarma');
+      verdad(nuevos.filter(b => b.goalId === 'B').every(b => toMin(b.inicio) >= 1140), 'Leer debería ir por la noche (≥19:00)');
+    });
+
+    prueba('Generador: respeta descansos y una sesión por objetivo y día', () => {
+      const { nuevos } = generarSemana({ fecha: lunes, goals, blocks: [], disponibilidad: disp, prefs, settings });
+      for (const a of nuevos) for (const b of nuevos) {
+        if (a === b || a.fecha !== b.fecha || toMin(b.inicio) < toMin(a.fin)) continue;
+        verdad(toMin(b.inicio) - toMin(a.fin) >= 10, `descanso insuficiente entre ${a.inicio}-${a.fin} y ${b.inicio}`);
+      }
+      const porDia = {};
+      for (const b of nuevos) { const k = b.fecha + b.goalId; porDia[k] = (porDia[k] || 0) + 1; }
+      verdad(Object.values(porDia).every(n => n === 1), 'repite objetivo el mismo día habiendo días libres');
+    });
+
+    prueba('Generador: avisa si no caben las horas', () => {
+      const { avisos } = generarSemana({ fecha: lunes, goals: [{ id: 'X', titulo: 'Mucho', horasSemana: 40, prioridad: 2 }], blocks: [], disponibilidad: disp, prefs, settings });
+      verdad(avisos.length === 1 && avisos[0].includes('Mucho'), JSON.stringify(avisos));
+    });
+
+    prueba('Generador: conserva los bloques fijados y los cuenta', () => {
+      const fijo = { id: 'F', fecha: lunes, inicio: '18:00', fin: '20:00', titulo: 'Inglés', goalId: 'A', fijado: true };
+      const suelto = { id: 'S', fecha: addDays(lunes, 1), inicio: '19:00', fin: '20:00', titulo: 'Viejo', goalId: 'B', fijado: false };
+      const { nuevos, borrar } = generarSemana({ fecha: lunes, goals, blocks: [fijo, suelto], disponibilidad: disp, prefs, settings });
+      verdad(!borrar.includes('F') && borrar.includes('S'), `borrar = ${borrar}`);
+      igual(minutos(nuevos, 'A'), 120, 'Inglés restante tras 2 h fijadas');
+      verdad(sinSolapes([...nuevos, fijo]), 'solapa con el fijado');
+    });
+
+    prueba('Validación: descarta solapes y horas inválidas; avisa fuera de disponibilidad', () => {
+      const fijos = [{ fecha: lunes, inicio: '18:00', fin: '19:00', titulo: 'Fijo' }];
+      const { validos, avisos } = validarBloques([
+        { fecha: lunes, inicio: '18:30', fin: '19:30', titulo: 'Choca' },
+        { fecha: lunes, inicio: '25:00', fin: '26:00', titulo: 'Mala hora' },
+        { fecha: lunes, inicio: '20:00', fin: '19:00', titulo: 'Al revés' },
+        { fecha: lunes, inicio: '10:00', fin: '11:00', titulo: 'Mañana' },
+        { fecha: lunes, inicio: '19:15', fin: '20:15', titulo: 'Bien' },
+      ], fijos, disp);
+      igual(validos.map(b => b.titulo).join(','), 'Mañana,Bien');
+      igual(avisos.length, 4, 'avisos');
+    });
+
+    // ---------- Otros ----------
+    prueba('Envío al Atajo: formato del JSON', () => {
+      const p = construirPayload({ desde: lunes, hasta: lunes, bloques: [{ fecha: lunes, inicio: '18:00', fin: '19:00', titulo: 'Inglés', frase: '¡Vamos!', importante: true }] });
+      igual(p.lista, 'Mi Mejor Versión'); igual(p.bloques[0].alarma, 'si'); igual(p.bloques[0].titulo, '⏰ Inglés');
+      verdad(/^\d{4}-\d{2}-\d{2}T18:00:00[+-]\d{2}:\d{2}$/.test(p.bloques[0].inicio), p.bloques[0].inicio);
+      verdad(p.bloques[0].etiquetaAlarma.startsWith('MMV · Inglés'), p.bloques[0].etiquetaAlarma);
+    });
+
+    prueba('Markdown: listas anidadas y escapado de HTML', () => {
+      const html = miniMarkdown('1. Uno\n2. Dos\n   1. Dos-a\n   - viñeta\n3. Tres <b>');
+      igual(html, '<ol><li>Uno</li><li>Dos<ol><li>Dos-a</li></ol><ul><li>viñeta</li></ul></li><li>Tres &lt;b&gt;</li></ol>');
+    });
+
+    prueba('Fechas: semana empieza en lunes', () => {
+      igual(weekday('2026-10-26'), 0, 'lunes'); igual(weekday('2026-11-01'), 6, 'domingo');
+      igual(weekStart('2026-10-29'), '2026-10-26');
+    });
+
+    document.getElementById('resumen').innerHTML = ko ? `<span class="ko">${ko} fallos</span> · ${ok} correctas` : `<span class="ok">✅ ${ok} pruebas correctas</span>`;
+    document.title = ko ? `FALLOS ${ko}` : `OK ${ok}`;
+  </script>
+</body>
+</html>
