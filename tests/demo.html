@@ -22,6 +22,8 @@
       for (const s of STORES) await db.clear(s);
       const hoy = hoyISO();
       await kvSet('inicioApp', addDays(hoy, -100));
+      await kvSet('bienvenidaHecha', true);
+      await kvSet('ultimaCopia', addDays(hoy, -10));
       await kvSet('profile', { nombre: 'Demo', sobreMi: 'Persona de ejemplo para probar la app.', rutina: 'Trabajo de 9 a 17 h.', fortalezas: 'Constancia', debilidades: 'El móvil', motivacion: 'Sentirme mejor', tono: 'Cercano y directo' });
       await kvSet('settings', { apiKey: '', modelo: 'gemini-flash-latest', tema: 'auto', importantes: 'alta', nombreAtajo: 'MMV Horario' });
       await kvSet('prefs', { sesionMin: 60, descansoMin: 10, maxHorasDia: 3 });
@@ -34,10 +36,23 @@
       ];
       await db.putMany('goals', goals);
       await db.putMany('tasks', [
-        { id: uid(), goalId: 'g1', titulo: 'Hacer test de nivel', hecho: true, creado: 1 },
+        { id: uid(), goalId: 'g1', titulo: 'Hacer test de nivel', hecho: true, hechoEn: addDays(hoy, -12), creado: 1 },
         { id: uid(), goalId: 'g1', titulo: 'Elegir curso online', hecho: false, creado: 2 },
-        { id: uid(), goalId: 'g2', titulo: 'Apuntarme al gimnasio', hecho: true, creado: 3 },
+        { id: uid(), goalId: 'g2', titulo: 'Apuntarme al gimnasio', hecho: true, hechoEn: addDays(hoy, -4), creado: 3 },
       ]);
+
+      // Historial de 30 días: cada vez se cumple un poco más (para ver la gráfica subir).
+      const pasados = [];
+      for (let i = 30; i >= 1; i--) {
+        const f = addDays(hoy, -i);
+        const constancia = (30 - i) / 30;
+        [['g1', '18:00', '19:00', 'Aprender inglés (B2)'], ['g2', '07:00', '08:00', 'Ir al gimnasio'], ['g3', '21:30', '22:00', 'Leer 12 libros']].forEach(([goalId, inicio, fin, titulo], k) => {
+          if ((i + k) % 3 === 0 && k === 2) return; // no todos los días hay lectura
+          const hecho = ((i * 7 + k * 3) % 10) / 10 < 0.35 + constancia * 0.6;
+          pasados.push({ id: uid() + i + k, fecha: f, inicio, fin, titulo, goalId, fijado: false, hecho, importante: goalId === 'g1', frase: '', origen: 'auto' });
+        });
+      }
+      await db.putMany('blocks', pasados);
 
       // Bloques de hoy (uno hecho) + semana generada.
       const ahora = new Date().getHours();
@@ -53,10 +68,11 @@
       await db.putMany('blocks', nuevos);
 
       const dias = n => Array.from({ length: n }, (_, i) => addDays(hoy, -i));
+      const conHuecos = (n, cada) => dias(n).filter((_, i) => i % cada !== cada - 1);
       await db.putMany('habits', [
-        { id: uid(), titulo: 'Beber 2 L de agua', emoji: '💧', registros: dias(6) },
-        { id: uid(), titulo: 'Leer 10 páginas', emoji: '📖', registros: dias(3).slice(1) },
-        { id: uid(), titulo: 'Meditar', emoji: '🧘', registros: [] },
+        { id: uid(), titulo: 'Beber 2 L de agua', emoji: '💧', registros: [...dias(9), ...conHuecos(30, 4).slice(8)], creado: addDays(hoy, -30) },
+        { id: uid(), titulo: 'Leer 10 páginas', emoji: '📖', registros: [...dias(3).slice(1), ...conHuecos(20, 3).slice(3)], creado: addDays(hoy, -20) },
+        { id: uid(), titulo: 'Meditar', emoji: '🧘', registros: [], creado: addDays(hoy, -2) },
       ]);
 
       // Finanzas

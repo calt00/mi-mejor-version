@@ -1,18 +1,20 @@
 // Service worker: guarda la app para que funcione sin conexión.
 // Sube VERSION cada vez que publiques cambios para que el iPhone descargue la nueva versión.
-const VERSION = 'mmv-v1';
+const VERSION = 'mmv-v2';
 const ARCHIVOS = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/util.js', 'js/db.js', 'js/datos.js', 'js/scheduler.js', 'js/coach.js', 'js/finanzas.js',
-  'js/cerdito.js', 'js/frases.js', 'js/iphone.js',
+  'js/cerdito.js', 'js/frases.js', 'js/iphone.js', 'js/progreso.js', 'js/logros.js', 'js/grafica.js',
   'js/views/comun.js', 'js/views/hoy.js', 'js/views/objetivos.js', 'js/views/horario.js',
-  'js/views/ahorro.js', 'js/views/coach.js', 'js/views/perfil.js',
+  'js/views/ahorro.js', 'js/views/coach.js', 'js/views/perfil.js', 'js/views/progreso.js',
+  'js/views/revision.js', 'js/views/foco.js', 'js/views/bienvenida.js',
   'docs/atajo-recordatorios.md', 'docs/acceso-rapido.md',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+  // cache: 'reload' evita guardar copias viejas de la caché del navegador.
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(ARCHIVOS.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {

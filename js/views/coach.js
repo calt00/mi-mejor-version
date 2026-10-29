@@ -44,6 +44,14 @@ export async function render(root) {
   conectarAcciones(chat, mensajes);
   bajar();
 
+  // Texto que llega desde otra pantalla (#coach?texto=…): se deja escrito para que lo revises y lo envíes.
+  const previo = new URLSearchParams(location.hash.split('?')[1] || '').get('texto');
+  if (previo) {
+    history.replaceState(null, '', '#coach');
+    ta.value = previo;
+    requestAnimationFrame(() => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; });
+  }
+
   ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; });
   ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(pointer: coarse)').matches) { e.preventDefault(); form.requestSubmit(); } });
   form.addEventListener('submit', e => { e.preventDefault(); enviar(ta.value); ta.value = ''; ta.style.height = 'auto'; });

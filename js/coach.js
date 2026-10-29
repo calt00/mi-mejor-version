@@ -198,7 +198,7 @@ export async function aplicarAccion(a) {
       return;
     }
     case 'anadir_habito':
-      await db.put('habits', { id: uid(), titulo: x.titulo, emoji: x.emoji || '✨', registros: [] });
+      await db.put('habits', { id: uid(), titulo: x.titulo, emoji: x.emoji || '✨', registros: [], creado: hoy });
       return;
     case 'registrar_gasto':
       await db.put('expenses', { id: uid(), importe: Math.abs(Number(x.importe)) || 0, categoria: CATEGORIAS[x.categoria] ? x.categoria : 'otros', nota: x.nota || '', fecha: x.fecha || hoy });
@@ -321,6 +321,20 @@ Da un diagnóstico breve y cercano (3-5 frases) y entre 3 y 5 acciones concretas
         titulo: { type: 'STRING' }, detalle: { type: 'STRING' }, ahorroMensual: { type: 'NUMBER' } }, required: ['titulo', 'detalle', 'ahorroMensual'] } },
     }, required: ['diagnostico', 'acciones'] },
     { system: await instruccionesBase(), temperatura: 0.5 });
+}
+
+export async function revisionSemanal(resumen) {
+  return generarJSON(
+    `Haz mi revisión de la semana del ${resumen.lunes} al ${resumen.domingo}. Datos de la semana:
+${JSON.stringify(resumen, null, 1)}
+
+(pct = % medio cumplido cada día entre bloques del horario y hábitos; horas en horas; gastado y ahorrado en euros.)
+Escribe un resumen cercano y sincero (3-5 frases): qué ha ido bien, qué ha costado y por qué puede haber pasado. Después da exactamente 3 ideas concretas y realistas para la semana que viene, basadas en estos datos.`,
+    { type: 'OBJECT', properties: {
+      resumen: { type: 'STRING' },
+      ideas: { type: 'ARRAY', items: { type: 'OBJECT', properties: { titulo: { type: 'STRING' }, detalle: { type: 'STRING' } }, required: ['titulo', 'detalle'] } },
+    }, required: ['resumen', 'ideas'] },
+    { system: await contextoCompleto(), temperatura: 0.7 });
 }
 
 export async function probarConexion() {

@@ -1,11 +1,12 @@
 // Pantalla «Perfil»: datos personales, ajustes, guías y copia de seguridad.
-import { exportAll, importAll } from '../db.js';
+import { exportAll, importAll, kvGet, kvSet } from '../db.js';
 import { getProfile, saveProfile, getSettings, saveSettings } from '../datos.js';
-import { esc, formData, toast, refrescar, sheet, miniMarkdown, hoyISO, opciones } from '../util.js';
+import { esc, formData, toast, refrescar, sheet, miniMarkdown, hoyISO, opciones, fmtFecha } from '../util.js';
 import { probarConexion } from '../coach.js';
+import { mostrarBienvenida } from './bienvenida.js';
 
 export async function render(root) {
-  const [p, s] = await Promise.all([getProfile(), getSettings()]);
+  const [p, s, ultimaCopia] = await Promise.all([getProfile(), getSettings(), kvGet('ultimaCopia')]);
   let persistente = null;
   try { persistente = await navigator.storage?.persisted?.(); } catch { /* sin soporte */ }
   const instalada = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
@@ -47,12 +48,14 @@ export async function render(root) {
       <div class="acciones" style="margin-top:0">
         <button class="btn sec chico" data-guia="atajo-recordatorios">⏰ Recordatorios y alarmas</button>
         <button class="btn sec chico" data-guia="acceso-rapido">📱 Acceso rápido</button>
+        <button class="btn sec chico" id="bienvenida">👋 Repetir bienvenida</button>
       </div>
     </div>
 
     <div class="card">
       <h3 style="margin-bottom:6px">💾 Copia de seguridad</h3>
       <p class="mini">Tus datos están solo en este iPhone${persistente ? ' (almacenamiento protegido ✓)' : ''}. Haz una copia de vez en cuando y guárdala en Archivos o iCloud Drive.</p>
+      <p class="mini">${ultimaCopia ? `Última copia: ${fmtFecha(ultimaCopia, { day: 'numeric', month: 'long' })}` : 'Todavía no has hecho ninguna copia.'}</p>
       <div class="acciones">
         <button class="btn sec chico" id="exportar">⬇️ Exportar copia</button>
         <label class="btn gris chico">⬆️ Importar copia<input type="file" id="importar" accept="application/json,.json" hidden></label>
@@ -86,7 +89,8 @@ export async function render(root) {
   });
 
   root.querySelectorAll('[data-guia]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); abrirGuia(b.dataset.guia); }));
-  root.querySelector('#exportar').addEventListener('click', exportar);
+  root.querySelector('#exportar').addEventListener('click', async () => { if (await exportar()) refrescar(); });
+  root.querySelector('#bienvenida').addEventListener('click', mostrarBienvenida);
   root.querySelector('#importar').addEventListener('change', async e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -112,19 +116,26 @@ export async function abrirGuia(nombre) {
   }
 }
 
-async function exportar() {
+// Devuelve true si la copia se ha guardado o compartido.
+export async function exportar() {
   const datos = await exportAll();
   const nombre = `mi-mejor-version-${hoyISO()}.json`;
   const blob = new Blob([JSON.stringify(datos, null, 1)], { type: 'application/json' });
   const file = new File([blob], nombre, { type: 'application/json' });
   if (navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: 'Copia de Mi Mejor Versión' }); return; }
-    catch (e) { if (e.name === 'AbortError') return; }
+    try {
+      await navigator.share({ files: [file], title: 'Copia de Mi Mejor Versión' });
+      await kvSet('ultimaCopia', hoyISO());
+      toast('✅ Copia guardada. ¡Datos a salvo!');
+      return true;
+    } catch (e) { if (e.name === 'AbortError') return false; }
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = nombre;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  await kvSet('ultimaCopia', hoyISO());
   toast('Copia descargada');
+  return true;
 }

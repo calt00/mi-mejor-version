@@ -101,7 +101,7 @@ async function detalle(g) {
   const reabrir = () => { close(); setTimeout(() => detalle(g), 260); };
   el.querySelectorAll('[data-t]').forEach(b => b.addEventListener('click', async () => {
     const t = tasks.find(x => x.id === b.dataset.t);
-    await db.put('tasks', { ...t, hecho: !t.hecho });
+    await db.put('tasks', { ...t, hecho: !t.hecho, hechoEn: t.hecho ? null : hoyISO() });
     if (!t.hecho) toast('✅ ¡Tarea completada!');
     reabrir();
   }));

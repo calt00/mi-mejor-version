@@ -1,11 +1,26 @@
 // Pantalla «Hoy»: progreso del día, bloques, consejo del coach, hábitos y ahorro.
 import { db, kvGet, kvSet } from '../db.js';
 import { getProfile } from '../datos.js';
-import { esc, hoyISO, fmtFecha, sheet, formData, toast, refrescar, uid, fmtEur, miniMarkdown } from '../util.js';
+import { esc, hoyISO, fmtFecha, sheet, formData, toast, refrescar, uid, fmtEur, miniMarkdown, addDays, diasEntre } from '../util.js';
 import { bloqueHTML, conectarBloques, abrirEditorBloque, abrirEnvioIphone, racha, datosFinanzas, cargando, momentoBloque } from './comun.js';
 import { iaDisponible, consejoDelDia } from '../coach.js';
 import { estadoMeta, recomendaciones } from '../finanzas.js';
 import { cerditoHTML } from '../cerdito.js';
+import { progresoDiario, mediaSerie, semanaPendiente } from '../progreso.js';
+import { barrasSVG } from '../grafica.js';
+import { comprobarLogros } from '../logros.js';
+import { abrirRevision } from './revision.js';
+import { abrirCalendarioHabito } from './progreso.js';
+import { exportar } from './perfil.js';
+
+const DIAS_ENTRE_COPIAS = 7;
+
+// Aviso si hay datos y hace más de una semana que no se hace copia.
+function tocaCopia({ hoy, ultimaCopia, copiaPospuesta, inicioApp, hayDatos }) {
+  if (!hayDatos || (copiaPospuesta && copiaPospuesta > hoy)) return null;
+  const dias = diasEntre(ultimaCopia || inicioApp, hoy);
+  return dias >= DIAS_ENTRE_COPIAS ? { dias, nunca: !ultimaCopia } : null;
+}
 
 function saludo(nombre) {
   const h = new Date().getHours();
@@ -15,7 +30,16 @@ function saludo(nombre) {
 
 export async function render(root) {
   const hoy = hoyISO();
-  const [perfil, goals, blocks, habits, fin] = await Promise.all([getProfile(), db.all('goals'), db.all('blocks'), db.all('habits'), datosFinanzas()]);
+  const [perfil, goals, blocks, habits, tasks, fin, revisiones, ultimaCopia, copiaPospuesta] = await Promise.all([
+    getProfile(), db.all('goals'), db.all('blocks'), db.all('habits'), db.all('tasks'), datosFinanzas(),
+    kvGet('revisiones', []), kvGet('ultimaCopia'), kvGet('copiaPospuesta'),
+  ]);
+  const inicioApp = fin.inicioApp || hoy;
+  const semana = progresoDiario({ blocks, habits, tasks, desde: addDays(hoy, -6), hasta: hoy, inicioApp });
+  const mediaSemana = mediaSerie(semana);
+  const lunesRevision = semanaPendiente(hoy, revisiones, inicioApp);
+  const hayDatos = goals.length + blocks.length + habits.length + fin.expenses.length + fin.savingsGoals.length > 0;
+  const copia = tocaCopia({ hoy, ultimaCopia, copiaPospuesta, inicioApp, hayDatos });
   const goalsById = Object.fromEntries(goals.map(g => [g.id, g]));
   const deHoy = blocks.filter(b => b.fecha === hoy).sort((a, b) => a.inicio.localeCompare(b.inicio));
   const hechos = deHoy.filter(b => b.hecho).length;
@@ -52,6 +76,17 @@ export async function render(root) {
       </div>
     </div>
 
+    ${lunesRevision ? `<div class="card aviso-card">
+      <div class="fila"><span style="font-size:30px">📋</span><div class="grow" style="flex:1">
+        <b>Tu revisión semanal está lista</b><div class="sub">Mira cómo te ha ido esta semana y qué mejorar en la siguiente.</div></div></div>
+      <div class="acciones"><button class="btn chico" id="revision">Ver mi semana</button></div></div>` : ''}
+
+    ${copia ? `<div class="card aviso-card naranja">
+      <div class="fila"><span style="font-size:30px">💾</span><div class="grow" style="flex:1">
+        <b>${copia.nunca ? 'Aún no has hecho ninguna copia' : `Hace ${copia.dias} días de tu última copia`}</b>
+        <div class="sub">Tus datos solo están en este iPhone. Guarda una copia en Archivos o iCloud Drive por si cambias de móvil.</div></div></div>
+      <div class="acciones"><button class="btn chico" id="copia">Hacer copia ahora</button><button class="btn gris chico" id="copia-luego">Más tarde</button></div></div>` : ''}
+
     <div class="card" id="consejo" hidden></div>
 
     <div class="seccion"><h2>Tu día</h2></div>
@@ -65,6 +100,12 @@ export async function render(root) {
       return `<div class="habito ${on ? 'on' : ''}" data-habito="${h.id}" role="button" aria-pressed="${on}">
         <div class="e">${esc(h.emoji || '✨')}</div><div class="t">${esc(h.titulo)}</div><div class="r">${r ? `🔥 ${r}` : '&nbsp;'}</div></div>`;
     }).join('')}</div>` : '<div class="card vacio">Añade hábitos diarios (beber agua, leer, meditar…) y mantén tu racha. 🔥</div>'}
+
+    <div class="seccion"><h2>Tu progreso</h2><a class="btn sec chico" href="#progreso">Ver más</a></div>
+    <a class="card" href="#progreso" style="display:block;color:inherit">
+      ${semana.some(d => d.pct != null) ? `<div class="fila sep"><span class="sub">Últimos 7 días</span><b>${mediaSemana} % de media</b></div>
+        ${barrasSVG(semana, { compacto: true })}` : '<div class="sub">📈 Marca tus bloques y hábitos como hechos y aquí verás una gráfica de tu progreso día a día.</div>'}
+    </a>
 
     <div class="seccion"><h2>Ahorro</h2><a class="btn sec chico" href="#ahorro">Abrir</a></div>
     <a class="card hero-ahorro" href="#ahorro" style="color:inherit">
@@ -88,8 +129,12 @@ export async function render(root) {
     if (!on) { navigator.vibrate?.(30); const r = racha(h); if (r > 1) toast(`🔥 ¡Racha de ${r} días!`); }
     refrescar();
   }));
+  root.querySelector('#revision')?.addEventListener('click', () => abrirRevision(lunesRevision).then(() => setTimeout(refrescar, 300)));
+  root.querySelector('#copia')?.addEventListener('click', async () => { if (await exportar()) refrescar(); });
+  root.querySelector('#copia-luego')?.addEventListener('click', async () => { await kvSet('copiaPospuesta', addDays(hoy, 2)); refrescar(); });
 
   pintarConsejo(root.querySelector('#consejo'));
+  comprobarLogros().catch(e => console.warn('Logros:', e));
 }
 
 async function pintarConsejo(caja, forzar = false) {
@@ -124,6 +169,7 @@ function gestionarHabitos(habits) {
     ${habits.length ? `<div class="card plano"><ul class="lista">${habits.map(h => `
       <li><span style="font-size:24px">${esc(h.emoji || '✨')}</span><div class="grow"><div class="t">${esc(h.titulo)}</div>
       <div class="mini">🔥 Racha: ${racha(h)} días · ${h.registros.length} días en total</div></div>
+      <button class="btn-icon" data-calendario="${h.id}" aria-label="Ver calendario">📅</button>
       <button class="btn-icon" data-borrar="${h.id}" aria-label="Borrar">🗑</button></li>`).join('')}</ul></div>` : ''}
     <form class="card">
       <h3 style="margin-bottom:10px">Nuevo hábito</h3>
@@ -134,9 +180,10 @@ function gestionarHabitos(habits) {
   el.querySelector('form').addEventListener('submit', async e => {
     e.preventDefault();
     const d = formData(e.target);
-    await db.put('habits', { id: uid(), titulo: d.titulo, emoji: d.emoji || '✨', registros: [] });
+    await db.put('habits', { id: uid(), titulo: d.titulo, emoji: d.emoji || '✨', registros: [], creado: hoyISO() });
     close(); refrescar();
   });
+  el.querySelectorAll('[data-calendario]').forEach(b => b.addEventListener('click', () => { close(); setTimeout(() => abrirCalendarioHabito(b.dataset.calendario), 260); }));
   el.querySelectorAll('[data-borrar]').forEach(b => b.addEventListener('click', async () => {
     if (!confirm('¿Borrar este hábito y su racha?')) return;
     await db.del('habits', b.dataset.borrar);

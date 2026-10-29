@@ -153,7 +153,7 @@ export async function abrirPeticionHorario(textoInicial = '') {
   });
 }
 
-async function editarDisponibilidad() {
+export async function editarDisponibilidad() {
   const [disp, prefs] = await Promise.all([getDisponibilidad(), getPrefs()]);
   const copia = disp.map(d => d.map(f => ({ ...f })));
   const { el, close } = sheet('Disponibilidad', '<div id="cont"></div>');

@@ -21,6 +21,9 @@
     import { etapa, escala } from '../js/cerdito.js';
     import { miniMarkdown, toMin, addDays, weekStart, hoyISO, weekday } from '../js/util.js';
     import { construirPayload } from '../js/iphone.js';
+    import { progresoDiario, mediaMovil, mejorRacha, resumenSemana, semanaPendiente, inicioHabito } from '../js/progreso.js';
+    import { logrosCumplidos, LOGROS } from '../js/logros.js';
+    import { barrasSVG, calendarioHTML } from '../js/grafica.js';
 
     const lista = document.getElementById('lista');
     let ok = 0, ko = 0;
@@ -189,6 +192,105 @@
       ], fijos, disp);
       igual(validos.map(b => b.titulo).join(','), 'Mañana,Bien');
       igual(avisos.length, 4, 'avisos');
+    });
+
+    // ---------- Progreso ----------
+    const blq = (fecha, hecho, goalId = 'A', inicio = '18:00', fin = '19:00') => ({ id: fecha + inicio + goalId, fecha, inicio, fin, titulo: 'x', goalId, hecho });
+
+    prueba('Progreso diario: bloques + hábitos, y días vacíos sin dato', () => {
+      const s = progresoDiario({
+        blocks: [blq('2026-10-26', true), blq('2026-10-26', false, 'B')],
+        habits: [{ id: 'h', titulo: 'Agua', registros: ['2026-10-26'], creado: '2026-10-26' }],
+        tasks: [], desde: '2026-10-25', hasta: '2026-10-26', inicioApp: '2026-10-01',
+      });
+      igual(s.length, 2);
+      igual(s[0].pct, null, 'día anterior al hábito y sin bloques');
+      igual(s[1].planificados, 3); igual(s[1].hechos, 2); igual(s[1].pct, 67);
+    });
+
+    prueba('Progreso diario: las tareas suman sin pasar del 100 %', () => {
+      const tasks = [{ id: 't1', hecho: true, hechoEn: '2026-10-26' }, { id: 't2', hecho: true, hechoEn: '2026-10-26' }, { id: 't3', hecho: false, hechoEn: '2026-10-26' }];
+      const [d] = progresoDiario({ blocks: [blq('2026-10-26', true), blq('2026-10-26', false, 'B')], habits: [], tasks, desde: '2026-10-26', hasta: '2026-10-26' });
+      igual(d.tareas, 2); igual(d.pct, 100);
+      const [solo] = progresoDiario({ blocks: [], habits: [], tasks, desde: '2026-10-26', hasta: '2026-10-26' });
+      igual(solo.pct, 100, 'día solo con tareas');
+    });
+
+    prueba('Hábitos antiguos sin fecha cuentan desde su primer registro', () => {
+      igual(inicioHabito({ registros: ['2026-10-20', '2026-10-10'] }, '2026-09-01'), '2026-10-10');
+      igual(inicioHabito({ registros: [] }, '2026-09-01'), '2026-09-01');
+      igual(inicioHabito({ registros: ['2026-10-01'], creado: '2026-10-05' }, '2026-09-01'), '2026-10-01', 'día marcado antes de crearlo');
+    });
+
+    prueba('Media móvil ignora los huecos', () => {
+      const m = mediaMovil([{ pct: 100 }, { pct: null }, { pct: 50 }, { pct: null }], 2);
+      igual(JSON.stringify(m), '[100,100,50,50]');
+      igual(mediaMovil([{ pct: null }])[0], null);
+    });
+
+    prueba('Mejor racha de un hábito', () => {
+      igual(mejorRacha({ registros: ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-05', '2026-10-06', '2026-10-02'] }), 3);
+      igual(mejorRacha({ registros: [] }), 0);
+      igual(mejorRacha({ registros: ['2026-10-31', '2026-11-01'] }), 2, 'cambio de mes');
+    });
+
+    prueba('Resumen semanal: bloques, horas, hábitos, tareas y dinero', () => {
+      const r = resumenSemana({
+        goals: [{ id: 'A', titulo: 'Inglés', horasSemana: 2 }],
+        blocks: [blq('2026-10-26', true), blq('2026-10-27', true), blq('2026-10-28', false), blq('2026-11-02', true)],
+        habits: [{ id: 'h', titulo: 'Agua', emoji: '💧', registros: ['2026-10-26', '2026-10-27', '2026-11-03'], creado: '2026-10-26' }],
+        tasks: [{ hecho: true, hechoEn: '2026-10-29' }, { hecho: true, hechoEn: '2026-11-05' }],
+        expenses: [{ importe: 10.5, fecha: '2026-10-30' }, { importe: 99, fecha: '2026-11-03' }],
+        contributions: [{ importe: 50, fecha: '2026-11-01' }], inicioApp: '2026-10-01',
+      }, '2026-10-26');
+      igual(r.domingo, '2026-11-01');
+      igual(r.bloques.hechos, 2); igual(r.bloques.total, 3);
+      igual(r.objetivos[0].horasHechas, 2); igual(r.objetivos[0].horasObjetivo, 2);
+      igual(r.habitos[0].dias, 2); igual(r.tareas, 1);
+      igual(r.gastado, 10.5); igual(r.ahorrado, 50);
+      igual(r.mejorDia.pct, 100);
+    });
+
+    prueba('Resumen semanal a mitad de semana: los días que faltan no cuentan', () => {
+      const r = resumenSemana({ hoy: '2026-10-27', goals: [], habits: [], tasks: [],
+        blocks: [blq('2026-10-26', true), blq('2026-10-27', true), blq('2026-10-30', false)] }, '2026-10-26');
+      igual(r.pct, 100); igual(r.bloques.total, 2);
+    });
+
+    prueba('Revisión semanal: domingo la semana actual, lunes a miércoles la anterior', () => {
+      igual(semanaPendiente('2026-11-01', [], '2026-10-01'), '2026-10-26', 'domingo');
+      igual(semanaPendiente('2026-11-02', [], '2026-10-01'), '2026-10-26', 'lunes');
+      igual(semanaPendiente('2026-11-04', [], '2026-10-01'), '2026-10-26', 'miércoles');
+      igual(semanaPendiente('2026-11-05', [], '2026-10-01'), null, 'jueves');
+      igual(semanaPendiente('2026-11-02', [{ semana: '2026-10-26' }], '2026-10-01'), null, 'ya hecha');
+      igual(semanaPendiente('2026-11-02', [], '2026-11-02'), null, 'app recién instalada');
+    });
+
+    prueba('Logros: se cumplen con los datos justos', () => {
+      const vacio = { hoy: '2026-10-29', blocks: [], habits: [], tasks: [], goals: [], savingsGoals: [], contributions: [], revisiones: [], serie: [] };
+      igual(logrosCumplidos(vacio).length, 0, 'sin datos');
+      const d = { ...vacio,
+        blocks: [blq('2026-10-26', true), blq('2026-10-26', true, 'B')],
+        contributions: [{ goalId: 'm', importe: 120, fecha: '2026-10-01' }],
+        savingsGoals: [{ id: 'm', nombre: 'Moto', meta: 100, creado: '2026-09-01' }],
+        habits: [{ registros: ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07'] }],
+      };
+      d.serie = progresoDiario({ blocks: d.blocks, desde: '2026-10-26', hasta: '2026-10-26' });
+      const ids = logrosCumplidos(d);
+      for (const id of ['primer-paso', 'dia-perfecto', 'ahorro-100', 'meta-cumplida', 'racha-7']) verdad(ids.includes(id), `falta ${id}: ${ids}`);
+      for (const id of ['bloques-10', 'ahorro-500', 'racha-30']) verdad(!ids.includes(id), `sobra ${id}`);
+      igual(new Set(LOGROS.map(l => l.id)).size, LOGROS.length, 'ids repetidos');
+    });
+
+    prueba('Gráfica y calendario se dibujan', () => {
+      const s = progresoDiario({ blocks: [blq('2026-10-26', true), blq('2026-10-27', false)], habits: [], tasks: [], desde: '2026-10-21', hasta: '2026-10-27' });
+      const svg = barrasSVG(s, { linea: mediaMovil(s) });
+      igual((svg.match(/<rect/g) || []).length, 2, 'una barra por día con datos');
+      verdad(svg.includes('g-barra alta') && svg.includes('g-barra baja'), 'colores por nivel');
+      verdad(svg.includes('class="g-linea"'), 'línea de media');
+      const cal = calendarioHTML('2026-10', new Set(['2026-10-05']));
+      igual((cal.match(/data-dia=/g) || []).length, 31);
+      verdad(/class="cal-dia on[^"]*"\s+data-dia="2026-10-05"/.test(cal), 'día marcado');
     });
 
     // ---------- Otros ----------

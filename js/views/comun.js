@@ -4,6 +4,7 @@ import { getIngresos, areaColor, getSettings } from '../datos.js';
 import { esc, sheet, formData, toast, refrescar, hoyISO, addDays, toMin, toHHMM, nowMin, fmtFecha, uid, opciones } from '../util.js';
 import { prepararEnvio, abrirAtajo } from '../iphone.js';
 import { esImportante } from '../scheduler.js';
+import { abrirFoco } from './foco.js';
 
 export const duracionMin = b => toMin(b.fin) - toMin(b.inicio);
 
@@ -42,6 +43,7 @@ export function bloqueHTML(b, goalsById = {}) {
       <div class="t">${esc(b.titulo)}</div>
       ${b.frase ? `<div class="frase">«${esc(b.frase)}»</div>` : ''}
       ${b.importante || b.fijado ? `<div class="tags">${b.importante ? '<span class="badge naranja">⏰ Alarma</span>' : ''}${b.fijado ? '<span class="badge">📌 Fijado</span>' : ''}</div>` : ''}
+      ${m === 'ahora' && !b.hecho ? `<button class="btn chico" style="margin-top:8px" data-foco="${b.id}">🎯 Concentrarme</button>` : ''}
     </div>
     <button class="check ${b.hecho ? 'on' : ''}" data-hecho="${b.id}" aria-label="${b.hecho ? 'Marcar como pendiente' : 'Marcar como hecho'}">${b.hecho ? '✓' : ''}</button>
   </div>`;
@@ -55,6 +57,10 @@ export function conectarBloques(root, bloques) {
     await db.put('blocks', { ...b, hecho: !b.hecho });
     if (!b.hecho) { navigator.vibrate?.(30); toast('¡Hecho! Un paso más. 💪'); }
     refrescar();
+  }));
+  root.querySelectorAll('[data-foco]').forEach(btn => btn.addEventListener('click', e => {
+    e.stopPropagation();
+    abrirFoco(bloques.find(x => x.id === btn.dataset.foco));
   }));
   root.querySelectorAll('[data-bloque]').forEach(el => el.addEventListener('click', () => {
     abrirEditorBloque(bloques.find(x => x.id === el.dataset.bloque));
