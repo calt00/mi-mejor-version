@@ -1,6 +1,6 @@
 // Service worker: guarda la app para que funcione sin conexión.
 // Sube VERSION cada vez que publiques cambios para que el iPhone descargue la nueva versión.
-const VERSION = 'mmv-v3';
+const VERSION = 'mmv-v4';
 const ARCHIVOS = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/util.js', 'js/db.js', 'js/datos.js', 'js/scheduler.js', 'js/coach.js', 'js/finanzas.js',

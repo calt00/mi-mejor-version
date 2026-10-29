@@ -64,12 +64,18 @@ export async function abrirPlan({ texto = null, autoEnviar = false, onAplicado =
       return;
     }
     await kvSet('miSituacion', { texto: t, fecha: hoyISO() });
-    res.innerHTML = cargando('Leyendo lo que me cuentas y organizando tu plan…');
+    // Puede tardar casi un minuto: se enseña el tiempo y en qué fase va para que se vea que sigue trabajando.
+    res.innerHTML = `${cargando('Leyendo lo que me cuentas…')}<p class="mini centro" id="espera">Suele tardar entre 20 y 60 segundos. No cierres la app.</p>`;
+    const etiqueta = res.querySelector('.cargando'), inicio = Date.now();
+    let fase = 'Leyendo lo que me cuentas…';
+    const pintarEspera = () => { etiqueta.lastChild.textContent = `${fase} ${Math.round((Date.now() - inicio) / 1000)} s`; };
+    const reloj = setInterval(pintarEspera, 1000);
+    const onProgreso = f => { fase = f === 'pensando' ? 'Pensando cómo organizarte…' : 'Escribiendo tu plan…'; };
     form.querySelector('button.btn.ancho').disabled = true;
     res.scrollIntoView({ behavior: 'smooth', block: 'start' });
     try {
       const [raw, existentes] = await Promise.all([
-        planDesdeTexto(t, { ajustes, actual: await resumenActual() }),
+        planDesdeTexto(t, { ajustes, actual: await resumenActual(), onProgreso }),
         Promise.all([db.all('goals'), db.all('habits'), db.all('savingsGoals'), db.all('fixedExpenses')])
           .then(([goals, habits, savingsGoals, fixedExpenses]) => ({ goals, habits, savingsGoals, fixedExpenses })),
       ]);
@@ -78,9 +84,11 @@ export async function abrirPlan({ texto = null, autoEnviar = false, onAplicado =
       mostrarPropuesta(plan);
     } catch (e) {
       console.error(e);
-      ajustes.pop();
-      res.innerHTML = `<div class="aviso" style="margin-top:12px">${esc(e instanceof ErrorIA ? e.message : 'No se pudo crear el plan. Inténtalo de nuevo.')}</div>`;
+      res.innerHTML = `<div class="aviso" style="margin-top:12px">${esc(e instanceof ErrorIA ? e.message : 'No se pudo crear el plan. Inténtalo de nuevo.')}</div>
+        <button type="button" class="btn sec ancho" id="reintentar">↻ Intentarlo otra vez</button>`;
+      res.querySelector('#reintentar').addEventListener('click', crear);
     } finally {
+      clearInterval(reloj);
       form.querySelector('button.btn.ancho').disabled = false;
     }
   }

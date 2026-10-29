@@ -22,10 +22,19 @@ export async function iaDisponible() {
   return Boolean(s.apiKey) && navigator.onLine;
 }
 
+// Si la conexión se corta tras mucho rato, casi seguro es porque Gemini tardó demasiado (Safari corta a ~60 s sin datos).
+function errorDeRed(e, inicio) {
+  const s = Math.round((Date.now() - inicio) / 1000);
+  return new ErrorIA(s >= 45
+    ? `Gemini ha tardado demasiado en responder (${s} s) y se ha cortado la conexión. Inténtalo otra vez; si se repite, escribe un texto un poco más corto.`
+    : `No se pudo conectar con Gemini. Revisa tu conexión e inténtalo otra vez. (Detalle: ${e.message || e.name})`);
+}
+
 async function llamar(metodo, body, signal) {
   const s = await getSettings();
   if (!s.apiKey) throw new ErrorIA('Falta tu API key de Gemini. Añádela en Perfil → Ajustes.');
   if (!navigator.onLine) throw new ErrorIA('Sin conexión. El coach necesita internet.');
+  const inicio = Date.now();
   let res;
   try {
     res = await fetch(`${BASE}${encodeURIComponent(s.modelo || 'gemini-flash-latest')}:${metodo}`, {
@@ -36,14 +45,50 @@ async function llamar(metodo, body, signal) {
     });
   } catch (e) {
     if (e.name === 'AbortError') throw e;
-    throw new ErrorIA('No se pudo conectar con Gemini. Revisa tu conexión.');
+    throw errorDeRed(e, inicio);
   }
   if (!res.ok) {
     let msg = '';
     try { msg = (await res.json()).error?.message || ''; } catch { /* sin cuerpo */ }
-    throw new ErrorIA(traducirError(res.status, msg));
+    throw Object.assign(new ErrorIA(traducirError(res.status, msg)), { status: res.status, detalle: msg });
   }
+  res.inicio = inicio;
   return res;
+}
+
+/**
+ * Lee una respuesta en streaming (SSE). Devuelve { texto, llamadas }.
+ * Las partes de razonamiento («thought») no se muestran, pero mantienen viva la conexión.
+ */
+async function leerStream(res, { onTexto, onPensando } = {}) {
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buffer = '', texto = '';
+  const llamadas = [];
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buffer.indexOf('\n')) >= 0) {
+        const linea = buffer.slice(0, i).trim();
+        buffer = buffer.slice(i + 1);
+        if (!linea.startsWith('data:')) continue;
+        let data;
+        try { data = JSON.parse(linea.slice(5)); } catch { continue; }
+        for (const p of data.candidates?.[0]?.content?.parts || []) {
+          if (p.thought) onPensando?.();
+          else if (p.text) { texto += p.text; onTexto?.(texto); }
+          if (p.functionCall) llamadas.push(p.functionCall);
+        }
+      }
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') throw e;
+    throw errorDeRed(e, res.inicio);
+  }
+  return { texto, llamadas };
 }
 
 const textoDe = data => (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
@@ -57,14 +102,26 @@ export async function generarTexto(prompt, { system, temperatura = 0.8 } = {}) {
   return textoDe(await res.json()).trim();
 }
 
-export async function generarJSON(prompt, schema, { system, temperatura = 0.6 } = {}) {
-  const res = await llamar('generateContent', {
-    systemInstruction: { parts: [{ text: system || await instruccionesBase() }] },
+// En streaming y pidiendo el razonamiento, para que las respuestas largas no se corten en el iPhone.
+// onProgreso('pensando' | 'escribiendo') avisa de que sigue trabajando.
+export async function generarJSON(prompt, schema, { system, temperatura = 0.6, onProgreso } = {}) {
+  const sys = system || await instruccionesBase();
+  const cuerpo = pensar => ({
+    systemInstruction: { parts: [{ text: sys }] },
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { temperature: temperatura, responseMimeType: 'application/json', responseSchema: schema },
+    generationConfig: { temperature: temperatura, responseMimeType: 'application/json', responseSchema: schema,
+      ...(pensar ? { thinkingConfig: { includeThoughts: true } } : {}) },
   });
-  const txt = textoDe(await res.json());
-  try { return JSON.parse(txt); } catch { throw new ErrorIA('La IA devolvió una respuesta que no se pudo leer. Inténtalo de nuevo.'); }
+  let res;
+  try {
+    res = await llamar('streamGenerateContent?alt=sse', cuerpo(true));
+  } catch (e) {
+    // Modelos sin razonamiento rechazan thinkingConfig: se repite sin él.
+    if (!(e instanceof ErrorIA) || e.status !== 400 || !/think/i.test(e.detalle || '')) throw e;
+    res = await llamar('streamGenerateContent?alt=sse', cuerpo(false));
+  }
+  const { texto } = await leerStream(res, { onTexto: () => onProgreso?.('escribiendo'), onPensando: () => onProgreso?.('pensando') });
+  try { return JSON.parse(texto); } catch { throw new ErrorIA('La IA devolvió una respuesta que no se pudo leer. Inténtalo de nuevo.'); }
 }
 
 // ---------- Contexto personal ----------
@@ -233,28 +290,8 @@ export async function chatStream(mensajes, { onTexto, signal }) {
     generationConfig: { temperature: 0.8 },
   }, signal);
 
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let buffer = '', texto = '';
-  const acciones = [];
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += dec.decode(value, { stream: true });
-    let i;
-    while ((i = buffer.indexOf('\n')) >= 0) {
-      const linea = buffer.slice(0, i).trim();
-      buffer = buffer.slice(i + 1);
-      if (!linea.startsWith('data:')) continue;
-      let data;
-      try { data = JSON.parse(linea.slice(5)); } catch { continue; }
-      for (const p of data.candidates?.[0]?.content?.parts || []) {
-        if (p.text && !p.thought) { texto += p.text; onTexto?.(texto); }
-        if (p.functionCall) acciones.push({ id: uid(), name: p.functionCall.name, args: p.functionCall.args || {}, estado: 'pendiente' });
-      }
-    }
-  }
-  return { texto: texto.trim(), acciones };
+  const { texto, llamadas } = await leerStream(res, { onTexto });
+  return { texto: texto.trim(), acciones: llamadas.map(f => ({ id: uid(), name: f.name, args: f.args || {}, estado: 'pendiente' })) };
 }
 
 // ---------- Funciones específicas ----------
@@ -327,7 +364,7 @@ Da un diagnóstico breve y cercano (3-5 frases) y entre 3 y 5 acciones concretas
 }
 
 // Convierte lo que el usuario cuenta de su vida en un plan estructurado (se valida en plan.js).
-export async function planDesdeTexto(texto, { ajustes = [], actual = '' } = {}) {
+export async function planDesdeTexto(texto, { ajustes = [], actual = '', onProgreso } = {}) {
   const hoy = hoyISO();
   const franja = { type: 'OBJECT', properties: { dia: { type: 'INTEGER', description: '0 lunes … 6 domingo' }, inicio: S('HH:MM'), fin: S('HH:MM') }, required: ['dia', 'inicio', 'fin'] };
   return generarJSON(
@@ -357,7 +394,7 @@ Con esto, organiza mi app. Devuelve:
       gastosFijos: { type: 'ARRAY', items: { type: 'OBJECT', properties: { nombre: S(''), importe: N('€ al mes'), categoria: ENUM('Categoría', Object.keys(CATEGORIAS)), dia: { type: 'INTEGER' } }, required: ['nombre', 'importe', 'categoria'] } },
       metasAhorro: { type: 'ARRAY', items: { type: 'OBJECT', properties: { nombre: S(''), emoji: S(''), meta: N('€'), fechaLimite: S('YYYY-MM-DD o vacío'), prioridad: { type: 'INTEGER' } }, required: ['nombre', 'meta'] } },
     }, required: ['resumen', 'perfil', 'disponibilidad', 'preferencias', 'objetivos', 'habitos'] },
-    { system: 'Eres un planificador personal experto en productividad, hábitos y finanzas personales. Hablas en español de España, de forma cercana. Diseñas planes realistas y sostenibles, nunca sobrecargados.', temperatura: 0.4 });
+    { system: 'Eres un planificador personal experto en productividad, hábitos y finanzas personales. Hablas en español de España, de forma cercana. Diseñas planes realistas y sostenibles, nunca sobrecargados.', temperatura: 0.4, onProgreso });
 }
 
 export async function revisionSemanal(resumen) {
