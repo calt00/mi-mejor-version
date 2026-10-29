@@ -13,9 +13,12 @@ function traducirError(status, msg = '') {
   if (status === 429) return 'Has llegado al límite gratuito de Gemini por ahora. Espera un rato y vuelve a intentarlo.';
   if (status === 404) return 'El modelo configurado no existe. Cámbialo en Perfil → Ajustes (por ejemplo, «gemini-flash-latest»).';
   if (status === 403) return 'Gemini ha rechazado la petición (permiso denegado). Revisa tu API key.';
-  if (status >= 500) return 'Gemini no está disponible ahora mismo. Inténtalo en un momento.';
+  if (status >= 500) return `Gemini no está disponible ahora mismo. Inténtalo en un momento. (Error ${status}${msg ? `: ${msg.slice(0, 160)}` : ''})`;
   return `Error de Gemini (${status}). ${msg}`.trim();
 }
+
+const errorGemini = (status, msg = '') => Object.assign(new ErrorIA(traducirError(status, msg)), { status, detalle: msg });
+const esperar = ms => new Promise(r => setTimeout(r, ms));
 
 export async function iaDisponible() {
   const s = await getSettings();
@@ -30,14 +33,14 @@ function errorDeRed(e, inicio) {
     : `No se pudo conectar con Gemini. Revisa tu conexión e inténtalo otra vez. (Detalle: ${e.message || e.name})`);
 }
 
-async function llamar(metodo, body, signal) {
+async function llamar(metodo, body, signal, modelo = null) {
   const s = await getSettings();
   if (!s.apiKey) throw new ErrorIA('Falta tu API key de Gemini. Añádela en Perfil → Ajustes.');
   if (!navigator.onLine) throw new ErrorIA('Sin conexión. El coach necesita internet.');
   const inicio = Date.now();
   let res;
   try {
-    res = await fetch(`${BASE}${encodeURIComponent(s.modelo || 'gemini-flash-latest')}:${metodo}`, {
+    res = await fetch(`${BASE}${encodeURIComponent(modelo || s.modelo || 'gemini-flash-latest')}:${metodo}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.apiKey },
       body: JSON.stringify(body),
@@ -50,7 +53,7 @@ async function llamar(metodo, body, signal) {
   if (!res.ok) {
     let msg = '';
     try { msg = (await res.json()).error?.message || ''; } catch { /* sin cuerpo */ }
-    throw Object.assign(new ErrorIA(traducirError(res.status, msg)), { status: res.status, detalle: msg });
+    throw errorGemini(res.status, msg);
   }
   res.inicio = inicio;
   return res;
@@ -77,6 +80,7 @@ async function leerStream(res, { onTexto, onPensando } = {}) {
         if (!linea.startsWith('data:')) continue;
         let data;
         try { data = JSON.parse(linea.slice(5)); } catch { continue; }
+        if (data.error) throw errorGemini(data.error.code || 500, data.error.message || '');
         for (const p of data.candidates?.[0]?.content?.parts || []) {
           if (p.thought) onPensando?.();
           else if (p.text) { texto += p.text; onTexto?.(texto); }
@@ -85,7 +89,7 @@ async function leerStream(res, { onTexto, onPensando } = {}) {
       }
     }
   } catch (e) {
-    if (e.name === 'AbortError') throw e;
+    if (e.name === 'AbortError' || e instanceof ErrorIA) throw e;
     throw errorDeRed(e, res.inicio);
   }
   return { texto, llamadas };
@@ -102,26 +106,45 @@ export async function generarTexto(prompt, { system, temperatura = 0.8 } = {}) {
   return textoDe(await res.json()).trim();
 }
 
+// Intentos de más a menos exigente. Gemini a veces da error interno (5xx) con esquemas grandes o con
+// el razonamiento activado, y los modelos sin razonamiento rechazan thinkingConfig (400).
+const INTENTOS_JSON = [
+  { pensar: true, esquema: true },
+  { pensar: false, esquema: true },
+  { pensar: false, esquema: false },
+  { pensar: false, esquema: false, modelo: 'gemini-flash-lite-latest' },
+];
+const reintentable = e => e instanceof ErrorIA && (e.status >= 500 || e.ilegible
+  || (e.status === 400 && /think|schema/i.test(e.detalle || '')));
+
 // En streaming y pidiendo el razonamiento, para que las respuestas largas no se corten en el iPhone.
-// onProgreso('pensando' | 'escribiendo') avisa de que sigue trabajando.
+// onProgreso('pensando' | 'escribiendo' | 'reintentando') avisa de que sigue trabajando.
 export async function generarJSON(prompt, schema, { system, temperatura = 0.6, onProgreso } = {}) {
   const sys = system || await instruccionesBase();
-  const cuerpo = pensar => ({
+  const cuerpo = ({ pensar, esquema }) => ({
     systemInstruction: { parts: [{ text: sys }] },
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { temperature: temperatura, responseMimeType: 'application/json', responseSchema: schema,
+    contents: [{ role: 'user', parts: [{ text: esquema ? prompt
+      : `${prompt}\n\nResponde SOLO con un objeto JSON válido (sin texto alrededor) que siga este esquema:\n${JSON.stringify(schema)}` }] }],
+    generationConfig: { temperature: temperatura, responseMimeType: 'application/json',
+      ...(esquema ? { responseSchema: schema } : {}),
       ...(pensar ? { thinkingConfig: { includeThoughts: true } } : {}) },
   });
-  let res;
-  try {
-    res = await llamar('streamGenerateContent?alt=sse', cuerpo(true));
-  } catch (e) {
-    // Modelos sin razonamiento rechazan thinkingConfig: se repite sin él.
-    if (!(e instanceof ErrorIA) || e.status !== 400 || !/think/i.test(e.detalle || '')) throw e;
-    res = await llamar('streamGenerateContent?alt=sse', cuerpo(false));
+  let ultimo;
+  for (const [n, intento] of INTENTOS_JSON.entries()) {
+    if (n) { onProgreso?.('reintentando'); await esperar(1500); }
+    try {
+      const res = await llamar('streamGenerateContent?alt=sse', cuerpo(intento), undefined, intento.modelo);
+      const { texto } = await leerStream(res, { onTexto: () => onProgreso?.('escribiendo'), onPensando: () => onProgreso?.('pensando') });
+      try { return JSON.parse(texto.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')); }
+      catch { throw Object.assign(new ErrorIA('La IA devolvió una respuesta que no se pudo leer. Inténtalo de nuevo.'), { ilegible: true }); }
+    } catch (e) {
+      console.warn(`Gemini, intento ${n + 1}:`, e.message);
+      if (intento.modelo && e.status === 404) break; // el modelo de reserva no existe: se informa del error anterior
+      ultimo = e;
+      if (!reintentable(e)) throw e;
+    }
   }
-  const { texto } = await leerStream(res, { onTexto: () => onProgreso?.('escribiendo'), onPensando: () => onProgreso?.('pensando') });
-  try { return JSON.parse(texto); } catch { throw new ErrorIA('La IA devolvió una respuesta que no se pudo leer. Inténtalo de nuevo.'); }
+  throw ultimo;
 }
 
 // ---------- Contexto personal ----------

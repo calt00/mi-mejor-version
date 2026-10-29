@@ -70,7 +70,9 @@ export async function abrirPlan({ texto = null, autoEnviar = false, onAplicado =
     let fase = 'Leyendo lo que me cuentas…';
     const pintarEspera = () => { etiqueta.lastChild.textContent = `${fase} ${Math.round((Date.now() - inicio) / 1000)} s`; };
     const reloj = setInterval(pintarEspera, 1000);
-    const onProgreso = f => { fase = f === 'pensando' ? 'Pensando cómo organizarte…' : 'Escribiendo tu plan…'; };
+    const onProgreso = f => {
+      fase = { pensando: 'Pensando cómo organizarte…', escribiendo: 'Escribiendo tu plan…', reintentando: 'Gemini va justo, lo intento de otra forma…' }[f] || fase;
+    };
     form.querySelector('button.btn.ancho').disabled = true;
     res.scrollIntoView({ behavior: 'smooth', block: 'start' });
     try {
