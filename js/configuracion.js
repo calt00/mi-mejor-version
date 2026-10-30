@@ -19,6 +19,7 @@ export function estadoInicial() {
         noche: { activo: false, inicio: '22:00', fin: '06:00', semanas: 1 },
       },
       actual: 'manana',
+      semanaActual: 1, // si el turno dura varias semanas, en cuál de ellas está ahora
     },
     variable: TODOS_LOS_DIAS.map(d => ({ activo: d < 5, inicio: '09:00', fin: '17:00' })),
     trayecto: 30,
@@ -67,10 +68,11 @@ export function libresDe(e, hoy) {
   const ic = inicioCiclo(e.turnos.dias);
   const inicio = addDays(hoy, -((weekday(hoy) - ic + 7) % 7));
   const actual = patron.includes(e.turnos.actual) ? e.turnos.actual : patron[0];
+  const semana = Math.min(Math.max(1, Number(e.turnos.semanaActual) || 1), patron.filter(x => x === actual).length);
   return {
     disponibilidad: porTurno[actual],
     turnos: {
-      rotativo: true, patron, inicioCiclo: ic, referencia: addDays(inicio, -7 * patron.indexOf(actual)),
+      rotativo: true, patron, inicioCiclo: ic, referencia: addDays(inicio, -7 * (patron.indexOf(actual) + semana - 1)),
       diasTrabajo: [...e.turnos.dias].sort((a, b) => a - b),
       horarios: Object.fromEntries(tipos.map(tp => [tp, { inicio: e.turnos.tipos[tp].inicio, fin: e.turnos.tipos[tp].fin }])),
       disponibilidad: porTurno,

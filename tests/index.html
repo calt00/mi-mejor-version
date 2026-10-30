@@ -526,6 +526,21 @@ Cobro 1.500 € al mes el día 28, pago 550 € de alquiler y quiero ahorrar 2.0
       verdad(!chocaCon(turnos.disponibilidad.tarde[4], '14:00', '23:59'), `viernes de tarde: ${JSON.stringify(turnos.disponibilidad.tarde[4])}`);
     });
 
+    prueba('Cuestionario: turnos de 2 semanas empezando por la segunda', () => {
+      const e = cfg({ tipoHorario: 'turnos' });
+      e.turnos.dias = [0, 1, 2, 3, 4];
+      e.turnos.tipos.manana.semanas = 2; e.turnos.tipos.tarde.semanas = 2;
+      e.turnos.actual = 'tarde'; e.turnos.semanaActual = 2; // ya ha hecho una semana de tarde
+      const { turnos } = libresDe(e, '2026-10-26');
+      igual(turnos.patron.join(), 'manana,manana,tarde,tarde');
+      igual(tipoTurno(turnos, '2026-10-26'), 'tarde', 'esta semana: 2.ª de tarde');
+      igual(tipoTurno(turnos, '2026-11-02'), 'manana', 'la que viene ya cambia a mañana');
+      igual(tipoTurno(turnos, '2026-11-09'), 'manana');
+      igual(tipoTurno(turnos, '2026-11-16'), 'tarde');
+      e.turnos.semanaActual = 1;
+      igual(tipoTurno(libresDe(e, '2026-10-26').turnos, '2026-11-02'), 'tarde', 'si es la 1.ª de tarde, la que viene sigue de tarde');
+    });
+
     prueba('Cuestionario: sin trabajo usa las horas de levantarse y acostarse', () => {
       const l = libresDe(cfg({ trabaja: false, levantar: '09:00', acostar: '23:00' }), HOY_T);
       verdad(franjasDe(l, 0).every(f => toMin(f.inicio) >= toMin('09:00') && toMin(f.fin) <= toMin('23:00')), JSON.stringify(franjasDe(l, 0)));
@@ -591,6 +606,11 @@ Cobro 1.500 € al mes el día 28, pago 550 € de alquiler y quiero ahorrar 2.0
       o = entender('he gastado 4,50 € en café', HOY_T); igual(o.importe, 4.5); igual(o.categoria, 'cafe');
       o = entender('me he gastado 32 euros en la compra del mercadona', HOY_T); igual(o.categoria, 'supermercado');
       o = entender('retrasa el inglés una hora', HOY_T); igual(o.duracion, 60);
+      o = entender('es mi segunda semana de tarde', HOY_T); igual(o.tipo, 'turno'); igual(o.turno, 'tarde'); igual(o.semana, 2);
+      o = entender('esta semana estoy en la 2ª semana de mañana', HOY_T); igual(o.tipo, 'turno'); igual(o.turno, 'manana'); igual(o.semana, 2);
+      o = entender('¿y el día siguiente?', HOY_T); igual(o.tipo, 'dia'); igual(o.relativo, true);
+      o = entender('trabajo de 9 a 14', HOY_T); igual(o.tipo, 'ocupado', 'sin día: se usa el del que se habla');
+      o = entender('ese día no puedo', HOY_T); igual(o.tipo, 'mover'); igual(o.fecha, null);
     });
 
     // ---------- Otros ----------

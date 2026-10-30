@@ -152,6 +152,7 @@ function conectarAsistente(caja) {
     const texto = form.texto.value.trim();
     if (!texto) return;
     form.texto.value = '';
+    await kvSet('agenteContexto', null); // desde «Hoy», lo que se escribe es para hoy
     const m = await responder(texto);
     if (m.ops) { recordar(m); refrescar(); return; }
     pintar(m);

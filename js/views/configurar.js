@@ -61,6 +61,8 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
         ${e.fijo.tramos.length < 3 ? '<button type="button" class="btn gris chico" data-accion="tramo-mas">+ Otro tramo (jornada partida)</button>' : ''}`;
       if (e.trabaja && e.tipoHorario === 'turnos') {
         const activos = tiposActivos(e);
+        // «Tarde · 2.ª semana»: por si ya has hecho alguna semana de ese turno.
+        const posiciones = activos.flatMap(k => Array.from({ length: T.tipos[k].semanas }, (_, n) => [`${k}:${n + 1}`, T.tipos[k].semanas > 1 ? `${TURNO_TXT[k]} · ${n + 1}.ª semana` : TURNO_TXT[k]]));
         detalle = `
         <span class="cfg-etiqueta">¿Qué días trabajas?</span>${diasHTML('turnos.dias')}
         <span class="cfg-etiqueta">¿Qué turnos haces?</span>
@@ -70,7 +72,7 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
           <div class="fila sep"><span class="mini">Semanas seguidas</span>
             <div class="stepper"><button type="button" data-accion="semanas" data-tipo="${k}" data-valor="-1" aria-label="Menos">−</button><b>${T.tipos[k].semanas}</b><button type="button" data-accion="semanas" data-tipo="${k}" data-valor="1" aria-label="Más">+</button></div></div>
         </div>`).join('')}
-        ${activos.length > 1 ? `<span class="cfg-etiqueta">Esta semana estoy de</span>${opcionesHTML('turno-actual', activos.map(k => [k, TURNO_TXT[k]]), T.actual)}` : ''}`;
+        ${posiciones.length > 1 ? `<span class="cfg-etiqueta">Esta semana estoy de</span>${opcionesHTML('turno-actual', posiciones, `${T.actual}:${T.semanaActual || 1}`)}` : ''}`;
       }
       if (e.trabaja && e.tipoHorario === 'variable') detalle = `
         <span class="cfg-etiqueta">Toca los días que trabajas y pon su horario</span>
@@ -188,9 +190,16 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
     dia: (v, b) => { const lista = leer(e, b.dataset.ruta), d = Number(v); escribir(e, b.dataset.ruta, lista.includes(d) ? lista.filter(x => x !== d) : [...lista, d].sort((x, y) => x - y)); },
     'tramo-mas': () => { const ult = e.fijo.tramos.at(-1); e.fijo.tramos.push({ inicio: ult.fin, fin: ult.fin < '20:00' ? '21:00' : '23:00' }); },
     'tramo-menos': v => { e.fijo.tramos.splice(Number(v), 1); },
-    'turno-tipo': v => { e.turnos.tipos[v].activo = !e.turnos.tipos[v].activo; if (!tiposActivos(e).includes(e.turnos.actual)) e.turnos.actual = tiposActivos(e)[0] || 'manana'; },
-    semanas: (v, b) => { const t = e.turnos.tipos[b.dataset.tipo]; t.semanas = Math.min(4, Math.max(1, t.semanas + Number(v))); },
-    'turno-actual': v => { e.turnos.actual = v; },
+    'turno-tipo': v => {
+      e.turnos.tipos[v].activo = !e.turnos.tipos[v].activo;
+      if (!tiposActivos(e).includes(e.turnos.actual)) { e.turnos.actual = tiposActivos(e)[0] || 'manana'; e.turnos.semanaActual = 1; }
+    },
+    semanas: (v, b) => {
+      const t = e.turnos.tipos[b.dataset.tipo];
+      t.semanas = Math.min(4, Math.max(1, t.semanas + Number(v)));
+      if (e.turnos.actual === b.dataset.tipo) e.turnos.semanaActual = Math.min(e.turnos.semanaActual || 1, t.semanas);
+    },
+    'turno-actual': v => { const [tipo, semana] = v.split(':'); e.turnos.actual = tipo; e.turnos.semanaActual = Number(semana) || 1; },
     'variable-dia': v => { e.variable[v].activo = !e.variable[v].activo; },
     sugerencia: (v, b) => { e.objetivos[b.dataset.i].titulo = v; },
     horas: (v, b) => { const o = e.objetivos[b.dataset.i]; o.horasSemana = Math.min(40, Math.max(0.5, o.horasSemana + Number(v))); },
