@@ -27,7 +27,8 @@
     import { normalizarPlan, cruzarConExistentes, unirFranjas, normalizarTurnos } from '../js/plan.js';
     import { interpretarTexto, tipoTurno } from '../js/interprete.js';
     import { entender } from '../js/agente.js';
-    import { FAMILIAS, TODOS as HABITOS, CATEGORIAS_HABITO, filtrar as filtrarHabitos, sugerir as sugerirHabitos, siguienteNivel } from '../js/habitos.js';
+    import { FAMILIAS, TODOS as HABITOS, CATEGORIAS_HABITO, filtrar as filtrarHabitos, sugerir as sugerirHabitos, siguienteNivel, HORARIO as HORARIO_HABITOS, habitoNuevo, frasesDeHabito, pensamientosDe } from '../js/habitos.js';
+    import { objetivoDeHabito } from '../js/rutinas.js';
     import { estadoInicial, libresDe, sesionDe, encaje, minutosLibresPorDia, objetivosDe, inicioCiclo, maxHorasDiaDe } from '../js/configuracion.js';
 
     const lista = document.getElementById('lista');
@@ -596,6 +597,35 @@ Cobro 1.500 € al mes el día 28, pago 550 € de alquiler y quiero ahorrar 2.0
       verdad(sugerirHabitos(3, { dificultad: 1, coste: 0, azar }).every(h => h.dificultad === 1 && h.coste === 0), 'respeta los filtros');
       igual(siguienteNivel('caminar-10')?.id, 'caminar-30', 'subir de nivel');
       igual(siguienteNivel('pasos-10000'), null, 'ya es el más retador');
+    });
+
+    prueba('Hábitos: cada uno tiene su sitio en el horario y pensamientos que ayudan', () => {
+      for (const h of HABITOS) {
+        verdad(HORARIO_HABITOS[h.id], `sin horario: ${h.id}`);
+        verdad(h.min >= 5 && h.veces >= 1 && h.veces <= 7 && ['manana', 'tarde', 'noche'].includes(h.cuando), `horario raro: ${h.id}`);
+        verdad(h.pensamientos.length >= 2 && h.pensamientos.every(p => p.si && p.piensa), `sin pensamientos: ${h.id}`);
+      }
+      const leer = habitoNuevo(HABITOS.find(h => h.id === 'leer-10'), HOY_T, 'noche');
+      igual(leer.momento, 'noche'); igual(leer.min, 15); igual(leer.veces, 7);
+      verdad(frasesDeHabito(leer).includes('Diez páginas o diez minutos: no hace falta más para avanzar.'), 'frases propias para sus bloques');
+      verdad(pensamientosDe(leer).general, 'y una general');
+    });
+
+    prueba('Hábitos en el horario: objetivo diario a su hora y fuera del límite de horas', () => {
+      const leer = { ...habitoNuevo(HABITOS.find(h => h.id === 'leer-10'), HOY_T, 'noche'), id: 'H1' };
+      const g = objetivoDeHabito(leer);
+      igual(g.esHabito, true); igual(g.habitoId, 'H1'); igual(g.sesionMin, 15); igual(g.dias.length, 7); igual(g.momento, 'noche');
+      const gym = objetivoDeHabito({ ...habitoNuevo(HABITOS.find(h => h.id === 'gimnasio'), HOY_T, 'tarde'), id: 'H2' });
+      igual(gym.dias.length, 0, '3 días por semana: el horario elige cuáles'); igual(gym.horasSemana, 3);
+      const libre = Array.from({ length: 7 }, () => [{ inicio: '18:00', fin: '23:30' }]);
+      const estudio = { id: 'E', titulo: 'Estudiar', horasSemana: 7, prioridad: 3, sesionMin: 60 };
+      const { nuevos } = generarSemana({ fecha: lunes, goals: [estudio, { ...g, id: 'HG' }], blocks: [], disponibilidad: libre, prefs: { ...prefs, maxHorasDia: 1 }, settings });
+      igual(nuevos.filter(b => b.goalId === 'HG').length, 7, 'un bloque de lectura cada día aunque el día ya esté lleno de estudio');
+      verdad(nuevos.filter(b => b.goalId === 'HG').every(b => b.inicio >= '19:00'), 'por la noche');
+      igual(nuevos.filter(b => b.goalId === 'E').length, 7, 'el estudio sigue cabiendo');
+      const agua = { ...objetivoDeHabito({ ...habitoNuevo(HABITOS.find(h => h.id === 'vaso-manana'), HOY_T, 'manana'), id: 'H3' }), id: 'AG' };
+      const r2 = generarSemana({ fecha: lunes, goals: [agua], blocks: [], disponibilidad: Array.from({ length: 7 }, () => [{ inicio: '07:00', fin: '09:00' }]), prefs, settings });
+      igual(r2.nuevos.length, 7, 'un hábito de 5 minutos también sale los 7 días');
     });
 
     // ---------- Asistente: entiende las órdenes ----------

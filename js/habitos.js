@@ -109,8 +109,61 @@ export const FAMILIAS = [
   ] },
 ];
 
-/** Todas las alternativas, con su familia, categoría y fuente. */
-export const TODOS = FAMILIAS.flatMap(f => f.alternativas.map(a => ({ ...a, familia: f.id, cat: f.cat, fuente: f.fuente || '' })));
+// Para el horario: minutos que se reservan, veces por semana y mejor momento del día.
+// Los hábitos que no ocupan tiempo (beber agua, la postura…) reservan 5 min como recordatorio.
+export const HORARIO = {
+  'caminar-10': [10, 7, 'tarde'], 'caminar-30': [30, 5, 'tarde'], 'pasos-10000': [60, 7, 'tarde'],
+  'fuerza-5': [5, 7, 'manana'], 'fuerza-casa': [30, 3, 'tarde'], gimnasio: [60, 3, 'tarde'],
+  bailar: [10, 7, 'tarde'], bici: [30, 5, 'manana'], correr: [30, 3, 'manana'], clases: [60, 2, 'tarde'],
+  levantarse: [5, 7, 'manana'], escaleras: [5, 7, 'manana'], estirar: [5, 7, 'manana'], yoga: [15, 5, 'manana'],
+  'fruta-1': [5, 7, 'manana'], verdura: [5, 7, 'tarde'], cinco: [5, 7, 'manana'],
+  refresco: [5, 7, 'tarde'], 'sin-picar': [5, 7, 'tarde'], cocinar: [45, 4, 'tarde'], batch: [120, 1, 'manana'],
+  'sin-pantalla': [5, 7, 'tarde'], desayuno: [10, 7, 'manana'],
+  'vaso-manana': [5, 7, 'manana'], botella: [5, 7, 'manana'], 'agua-2l': [5, 7, 'manana'],
+  'misma-hora': [5, 7, 'noche'], 'sin-pantalla-noche': [30, 7, 'noche'], 'dormir-7': [5, 7, 'noche'], 'cafe-tarde': [5, 7, 'tarde'], dormitorio: [5, 7, 'noche'],
+  respirar: [5, 7, 'tarde'], 'meditar-10': [10, 7, 'manana'], 'meditar-app': [15, 7, 'manana'],
+  'tres-cosas': [5, 7, 'noche'], diario: [10, 7, 'noche'], 'luz-natural': [10, 7, 'manana'], naturaleza: [90, 1, 'manana'],
+  '20-20-20': [5, 7, 'manana'], 'movil-fuera': [5, 7, 'noche'], 'limite-redes': [5, 7, 'tarde'], 'dia-sin-redes': [5, 1, 'manana'],
+  mensaje: [5, 7, 'tarde'], llamar: [20, 1, 'tarde'], plan: [120, 1, 'tarde'], voluntariado: [120, 1, 'manana'],
+  'leer-10': [15, 7, 'noche'], 'leer-30': [30, 7, 'noche'], 'idioma-app': [10, 7, 'manana'], curso: [45, 3, 'tarde'],
+  cama: [5, 7, 'manana'], 'ordenar-10': [10, 7, 'tarde'], gastos: [5, 7, 'noche'], planificar: [10, 7, 'noche'],
+  postura: [5, 7, 'manana'], dientes: [5, 7, 'noche'], protector: [5, 7, 'manana'], alcohol: [5, 7, 'tarde'], tabaco: [5, 7, 'manana'],
+};
+
+// Pensamientos que suelen frenar cada hábito y cómo darles la vuelta (para que cueste menos cumplirlo).
+const PENSAMIENTOS = {
+  caminar: [['No me apetece salir', 'Solo hasta la esquina. Si al llegar quiero volver, vuelvo.'], ['No tengo tiempo', 'Son unos minutos: menos que un capítulo de una serie, y me despeja la cabeza.']],
+  fuerza: [['Estoy cansado', 'Hago la versión mínima: una sola serie. Moverme me da energía.'], ['No veo resultados', 'La fuerza se gana despacio: cada sesión cuenta aunque aún no se note.']],
+  cardio: [['No se me da bien', 'Todo el mundo empezó sin saber. Hoy solo toca empezar.'], ['Hoy no voy a rendir', 'Un ritmo suave también suma. Lo importante es ir.']],
+  sentado: [['Ahora no puedo parar', 'Dos minutos de pie no me quitan el hilo: me lo devuelven.'], ['Ya me levantaré luego', 'Luego nunca llega: me levanto ahora y vuelvo.']],
+  fruta: [['La fruta no me llena', 'Con un yogur o unos frutos secos, sí.'], ['Comer sano es caro', 'La fruta de temporada y la verdura congelada están entre lo más barato.']],
+  azucar: [['Me lo merezco', 'Me merezco sentirme bien también después.'], ['Por uno no pasa nada', 'Si es la excepción, no; lo que estoy creando es la regla.']],
+  'comer-consciente': [['Así aprovecho el tiempo', 'Comer con calma también es aprovecharlo: para mí.'], ['Por la mañana no tengo hambre', 'Algo pequeño vale: una fruta o un yogur.']],
+  agua: [['No tengo sed', 'La sed llega tarde: bebo antes de tenerla.'], ['Se me olvida', 'Con la botella a la vista, me lo recuerda sola.']],
+  sueno: [['Un capítulo más', 'El capítulo seguirá ahí mañana; mi descanso no.'], ['No tengo sueño', 'Me tumbo a leer con la luz baja: el sueño llega solo.']],
+  meditar: [['Mi mente no para, esto no es para mí', 'Que la mente se vaya es normal: volver a la respiración es el ejercicio.'], ['No tengo tiempo', 'Un minuto respirando también cuenta.']],
+  gratitud: [['Hoy no ha pasado nada bueno', 'Algo pequeño cuenta: un café, una charla, haber terminado algo.'], ['Esto es una tontería', 'Es pequeño, pero entrena mi cabeza para ver lo que sí va bien.']],
+  movil: [['Solo un momento', 'Ese momento suele ser media hora: lo dejo para después.'], ['Me voy a perder algo', 'Lo importante me llegará igual; lo que de verdad pierdo es tiempo para mí.']],
+  social: [['No quiero molestar', 'A casi todo el mundo le alegra que se acuerden de él.'], ['Ya hablaremos otro día', 'Un mensaje corto hoy vale más que una llamada larga que nunca llega.']],
+  aprender: [['No me concentro', 'Diez páginas o diez minutos: no hace falta más para avanzar.'], ['Ya es tarde para aprender', 'El mejor momento era antes; el segundo mejor es hoy.']],
+  orden: [['Ya lo haré luego', 'Son dos minutos: lo hago ahora y me lo quito de la cabeza.'], ['No sirve de nada', 'Lo que se mide y se ordena, se mejora.']],
+  cuidarte: [['Ya lo haré cuando tenga tiempo', 'Cuidarme es lo que me da energía para todo lo demás.'], ['Una vez no importa', 'Cada vez que lo hago, la siguiente me cuesta menos.']],
+};
+
+/** Pensamientos que sirven para cualquier hábito. */
+export const PENSAMIENTOS_GENERALES = [
+  'No tiene que ser perfecto: hecho es mejor que perfecto.',
+  'Si hoy solo puedo dos minutos, hago dos minutos: lo importante es no romper la cadena.',
+  'No espero a tener ganas: las ganas llegan al empezar.',
+  'Si fallo un día no pasa nada; lo importante es no fallar dos seguidos.',
+  'Cada vez que lo cumplo, me parezco un poco más a la persona que quiero ser.',
+];
+
+/** Todas las alternativas, con su familia, categoría, fuente, sitio en el horario y pensamientos. */
+export const TODOS = FAMILIAS.flatMap(f => f.alternativas.map(a => {
+  const [min, veces, cuando] = HORARIO[a.id] || [10, 7, 'manana'];
+  return { ...a, familia: f.id, cat: f.cat, fuente: f.fuente || '', min, veces, cuando, pensamientos: (PENSAMIENTOS[f.id] || []).map(([si, piensa]) => ({ si, piensa })) };
+}));
 
 export const habitoPorId = id => TODOS.find(h => h.id === id) || null;
 
@@ -137,8 +190,23 @@ export function sugerir(n, { yaTiene = [], dificultad = null, coste = null, azar
   return out;
 }
 
-/** Hábito listo para guardar a partir de una alternativa del catálogo. */
-export const habitoNuevo = (h, hoy) => ({ id: uid(), titulo: h.titulo, emoji: h.emoji, registros: [], creado: hoy, catalogo: h.id, dificultad: h.dificultad, coste: h.coste });
+/** Hábito listo para guardar a partir de una alternativa del catálogo (o de uno escrito por el usuario). */
+export const habitoNuevo = (h, hoy, momento = h.cuando || 'manana') => ({
+  id: uid(), titulo: h.titulo, emoji: h.emoji || '✨', registros: [], creado: hoy, catalogo: h.id || null,
+  dificultad: h.dificultad ?? null, coste: h.coste ?? null, min: h.min || 10, veces: h.veces || 7, momento,
+});
+
+/** Pensamientos para un hábito guardado (los de su tipo y uno general). */
+export function pensamientosDe(habito) {
+  const propios = habitoPorId(habito.catalogo)?.pensamientos || [];
+  return { propios, general: PENSAMIENTOS_GENERALES[(habito.titulo || '').length % PENSAMIENTOS_GENERALES.length] };
+}
+
+/** Frases para los bloques de un hábito: las respuestas a sus pensamientos y las generales. */
+export function frasesDeHabito(habito) {
+  const { propios } = pensamientosDe(habito);
+  return [...propios.map(p => p.piensa), ...PENSAMIENTOS_GENERALES];
+}
 
 /** Alternativa un poco más retadora de la misma familia (para «subir de nivel»), o null. */
 export function siguienteNivel(id) {

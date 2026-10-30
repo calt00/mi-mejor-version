@@ -5,7 +5,7 @@ App web personal (PWA) para iPhone: objetivos, horario inteligente, asistente pr
 ## Qué incluye
 
 - **Hoy**: progreso del día, caja para escribir al asistente, bloque actual y siguiente, hábitos con rachas y resumen de ahorro.
-- **Hábitos**: catálogo de más de 40 hábitos saludables (cifras de la OMS, la AASM y la EFSA) con filtros de dificultad (fácil, media, retadora), coste (gratis, barato, con gasto) y tema, alternativas para probar dentro de cada propósito, «🎲 Sugiéreme 3» y «⬆️ subir de nivel» tras 7 días de racha.
+- **Hábitos**: catálogo de más de 40 hábitos saludables (cifras de la OMS, la AASM y la EFSA) con filtros de dificultad (fácil, media, retadora), coste (gratis, barato, con gasto) y tema, alternativas para probar dentro de cada propósito, «🎲 Sugiéreme 3» y «⬆️ subir de nivel» tras 7 días de racha. Al añadir un hábito se pregunta si por la mañana, por la tarde o por la noche y se pone en el horario como un objetivo (cada día o X días por semana); marcarlo en «Hoy» marca su bloque y al revés. Cada hábito trae los pensamientos que suelen frenarlo y cómo darles la vuelta, que salen también como frase en sus bloques y recordatorios.
 - **Objetivos**: objetivos con horas semanales, tareas y botón «¿Cómo empiezo?» (primeros pasos según el tipo de objetivo).
 - **Horario**: generador automático según tu disponibilidad (con turnos rotativos), que reparte solo lo que cabe en los días que quedan y pone cada objetivo a la misma hora para crear rutina.
 - **Enviar al iPhone**: crea Recordatorios (y Alarmas para lo importante) con una frase motivadora mediante un Atajo de iOS.
@@ -49,7 +49,8 @@ Después de cambiar archivos, sube `VERSION` en `sw.js` para que el iPhone desca
 | `js/scheduler.js` | Generador y validación de horarios |
 | `js/finanzas.js` | Presupuesto, metas y recomendaciones de ahorro |
 | `js/cerdito.js` | Cerdito hucha en SVG |
-| `js/habitos.js` | Catálogo de hábitos saludables, filtros y sugerencias |
+| `js/habitos.js` | Catálogo de hábitos saludables, duración, momento recomendado, pensamientos y sugerencias |
+| `js/rutinas.js` | Hábitos en el horario: objetivo asociado, bloques y marcar hábito ↔ bloque |
 | `js/configuracion.js` | Respuestas del cuestionario → horas libres, turnos y objetivos |
 | `js/interprete.js` | Intérprete de texto sin IA (en pruebas), cálculo de horas libres y turnos rotativos |
 | `js/plan.js` | Validación del plan antes de guardarlo |

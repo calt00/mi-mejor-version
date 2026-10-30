@@ -384,6 +384,9 @@ input[type="checkbox"] { width: auto; }
 .habito-cat .t { font-weight: 700; }
 .habito-cat .tags { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
 .habito-cat-emoji { font-size: 28px; line-height: 1; flex: none; }
+.elegir-momento { margin-top: 10px; padding: 10px; background: var(--card2); border-radius: 12px; }
+.elegir-momento .opciones-chip { margin-top: 6px; }
+.pensamiento { padding: 12px 14px; margin-bottom: 8px; }
 .dia-check { position: relative; cursor: pointer; }
 .dia-check input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .dia-check span { display: grid; place-items: center; min-height: 44px; border: 2px solid var(--sep); border-radius: 12px; font-weight: 700; background: var(--card); }

@@ -4,15 +4,29 @@ import { getSettings, getIngresos } from './datos.js';
 import { hoyISO, addDays, isoLocal, nowMin, toMin, fmtEur, parseISODate, toISODate, daysInMonth } from './util.js';
 import { ordenarBloques } from './scheduler.js';
 import { frasesLocales } from './frases.js';
+import { frasesDeHabito } from './habitos.js';
 import { estadoMeta } from './finanzas.js';
 
 export const LISTA_RECORDATORIOS = 'Mi Mejor Versión';
+
+/** Una frase motivadora para cada bloque: los de un hábito, con los pensamientos que ayudan a cumplirlo. */
+export async function frasesPara(bloques) {
+  const [goals, habits] = await Promise.all([db.all('goals'), db.all('habits')]);
+  const habitoDe = id => { const g = goals.find(x => x.id === id); return g?.habitoId ? habits.find(h => h.id === g.habitoId) : null; };
+  const generales = await frasesLocales(bloques.length);
+  return bloques.map((b, i) => {
+    const h = habitoDe(b.goalId);
+    if (!h) return generales[i];
+    const propias = frasesDeHabito(h);
+    return propias[(i + b.fecha.charCodeAt(9)) % propias.length];
+  });
+}
 
 // Rellena la frase motivadora de los bloques que no la tienen.
 export async function asignarFrases(bloques) {
   const sinFrase = bloques.filter(b => !b.frase);
   if (!sinFrase.length) return bloques;
-  const frases = await frasesLocales(sinFrase.length);
+  const frases = await frasesPara(sinFrase);
   sinFrase.forEach((b, i) => { b.frase = frases[i]; });
   await db.putMany('blocks', sinFrase);
   return bloques;

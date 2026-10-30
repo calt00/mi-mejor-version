@@ -9,7 +9,9 @@ import { generarSemana, huecosDia, ordenarBloques } from './scheduler.js';
 import { progresoDiario, mediaSerie, mejorRacha } from './progreso.js';
 import { estadoMeta } from './finanzas.js';
 import { frasesLocales } from './frases.js';
-import { TODOS as HABITOS_CATALOGO, DIFICULTAD, COSTE, sugerir, habitoPorId, habitoNuevo } from './habitos.js';
+import { frasesPara } from './iphone.js';
+import { crearHabito, marcarBloque, marcarHabito, MOMENTOS_HABITO } from './rutinas.js';
+import { TODOS as HABITOS_CATALOGO, DIFICULTAD, COSTE, sugerir, habitoPorId } from './habitos.js';
 
 const TURNO_TXT = { manana: 'mañana', tarde: 'tarde', noche: 'noche' };
 const DIA_RE = /\b(lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/;
@@ -202,7 +204,7 @@ async function regenerar(reg, fechas) {
   let avisos = [];
   for (const fecha of fechas) {
     const r = generarSemana({ fecha, goals, blocks: await db.all('blocks'), disponibilidad, prefs, settings });
-    const frases = await frasesLocales(r.nuevos.length);
+    const frases = await frasesPara(r.nuevos);
     for (const id of r.borrar) await reg.del('blocks', id);
     for (const [i, b] of r.nuevos.entries()) await reg.put('blocks', { ...b, frase: frases[i] || '' });
     nuevos.push(...r.nuevos);
@@ -276,13 +278,13 @@ const ACCIONES = {
     const bloqueNombrado = mejor(o.texto, bloques.filter(b => !b.hecho && b.fecha <= hoy && b.fecha >= addDays(hoy, -2)), b => b.titulo);
     if (habito && (!bloqueNombrado || parecido(o.texto, habito.titulo) >= parecido(o.texto, bloqueNombrado.titulo))) {
       if (habito.registros.includes(hoy)) return { texto: `Ya tenías marcado «${habito.titulo}» hoy. 👍` };
-      await reg.put('habits', { ...habito, registros: [...habito.registros, hoy] });
+      await marcarHabito(habito, hoy, true, reg);
       const racha = rachaDe({ ...habito, registros: [...habito.registros, hoy] }, hoy);
       return { texto: `${habito.emoji || '✨'} Marcado «${habito.titulo}».${racha > 1 ? ` ¡Racha de **${racha} días**! 🔥` : ''}` };
     }
     const b = bloqueNombrado || bloqueObjetivo(o.texto, bloques.filter(x => x.fecha <= hoy), hoy, hoy);
     if (!b) return { texto: 'No encuentro nada pendiente que marcar. Dime qué has hecho, por ejemplo: «ya he hecho inglés».' };
-    await reg.put('blocks', { ...b, hecho: true });
+    await marcarBloque(b, true, reg);
     const [frase] = await frasesLocales(1);
     const quedan = bloques.filter(x => x.fecha === hoy && !x.hecho && x.id !== b.id);
     return { texto: `✅ ¡Hecho «${b.titulo}»! ${frase}${quedan.length ? `\nTe ${quedan.length === 1 ? 'queda' : 'quedan'} ${quedan.length} hoy.` : '\n🎉 ¡Has terminado todo lo de hoy!'}` };
@@ -455,7 +457,7 @@ const ACCIONES = {
   async marcar(o, reg) {
     const b = await db.get('blocks', o.bloqueId);
     if (!b) return { texto: 'Ese bloque ya no existe.' };
-    await reg.put('blocks', { ...b, hecho: true, atrasoGestionado: true });
+    await marcarBloque({ ...b, atrasoGestionado: true }, true, reg);
     return { texto: `✅ ¡Genial! Marcado «${b.titulo}» como hecho.` };
   },
 
@@ -524,12 +526,23 @@ const ACCIONES = {
     };
   },
 
-  async crearHabito(o, reg, hoy) {
+  async crearHabito(o, reg) {
     const h = habitoPorId(o.id);
     if (!h) return { texto: 'No encuentro ese hábito.' };
     if ((await db.all('habits')).some(x => x.catalogo === h.id)) return { texto: `Ya tienes «${h.titulo}». 👍` };
-    await reg.put('habits', habitoNuevo(h, hoy));
-    return { texto: `${h.emoji} ¡Añadido «${h.titulo}»! Lo verás en «Hoy» para marcarlo cada día.\n👉 **Cómo empezar:** ${h.empezar}` };
+    if (!o.momento) {
+      return {
+        texto: `¿Cuándo quieres hacer «${h.emoji} ${h.titulo}»? (${h.min} min, ${h.veces >= 7 ? 'cada día' : `${h.veces} ${h.veces === 1 ? 'día' : 'días'} por semana`})`,
+        botones: MOMENTOS_HABITO.map(([v, t]) => ({ etiqueta: `${t}${v === h.cuando ? ' ⭐' : ''}`, orden: { tipo: 'crearHabito', id: h.id, momento: v } })),
+      };
+    }
+    const { habito, bloques } = await crearHabito(h, o.momento, reg);
+    const momento = { manana: 'por la mañana', tarde: 'por la tarde', noche: 'por la noche' }[o.momento];
+    return { texto: [
+      `${h.emoji} ¡Añadido «${h.titulo}»! Lo he puesto en tu horario ${h.veces >= 7 ? 'cada día' : `${h.veces} ${h.veces === 1 ? 'día' : 'días'} por semana`} ${momento} (${bloques.length} bloques en estas dos semanas).`,
+      `👉 **Cómo empezar:** ${h.empezar}`,
+      ...h.pensamientos.map(p => `💭 Si piensas **«${p.si}»** → «${p.piensa}»`),
+    ].join('\n') };
   },
 
   async desconocido(o) {

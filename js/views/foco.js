@@ -3,6 +3,7 @@
 import { db, kvGet, kvSet } from '../db.js';
 import { esc, parseISODate, toMin, refrescar, toast } from '../util.js';
 import { frasesLocales } from '../frases.js';
+import { marcarBloque } from '../rutinas.js';
 
 const TRABAJO_MIN = 25, DESCANSO_MIN = 5;
 let abierto = null; // { capa, intervalo, wakeLock }
@@ -132,7 +133,7 @@ async function terminar(estado) {
   clearInterval(abierto.intervalo);
   await db.del('kv', 'foco');
   const b = await db.get('blocks', estado.bloqueId);
-  if (b && !b.hecho) await db.put('blocks', { ...b, hecho: true });
+  if (b && !b.hecho) await marcarBloque(b, true);
   const [frase] = await frasesLocales(1);
   const min = Math.round((Math.min(Date.now(), estado.finMs) - estado.empezado) / 60000);
   navigator.vibrate?.([100, 50, 100, 50, 200]);

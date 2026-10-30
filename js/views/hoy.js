@@ -1,7 +1,7 @@
 // Pantalla «Hoy»: progreso del día, asistente, bloques, hábitos y ahorro.
 import { db, kvGet, kvSet } from '../db.js';
 import { getProfile } from '../datos.js';
-import { esc, hoyISO, fmtFecha, sheet, formData, toast, refrescar, uid, fmtEur, addDays, diasEntre } from '../util.js';
+import { esc, hoyISO, fmtFecha, sheet, formData, toast, refrescar, fmtEur, fmtHoras, addDays, diasEntre, opciones } from '../util.js';
 import { bloqueHTML, conectarBloques, abrirEditorBloque, abrirEnvioIphone, racha, datosFinanzas, momentoBloque } from './comun.js';
 import { responder, mensajeHTML, conectarMensajes } from './asistente.js';
 import { estadoMeta, recomendaciones } from '../finanzas.js';
@@ -12,8 +12,9 @@ import { comprobarLogros } from '../logros.js';
 import { abrirRevision } from './revision.js';
 import { abrirCalendarioHabito } from './progreso.js';
 import { exportar } from './perfil.js';
-import { abrirCatalogoHabitos, anadirHabitoCatalogo } from './habitos.js';
+import { abrirCatalogoHabitos, mostrarHabitoCreado, botonesMomento, frecuenciaTxt } from './habitos.js';
 import { siguienteNivel } from '../habitos.js';
+import { crearHabito, ponerEnHorario, borrarHabito, marcarHabito } from '../rutinas.js';
 
 const DIAS_ENTRE_COPIAS = 7;
 
@@ -135,8 +136,8 @@ export async function render(root) {
   root.querySelectorAll('[data-habito]').forEach(el => el.addEventListener('click', async () => {
     const h = habits.find(x => x.id === el.dataset.habito);
     const on = h.registros.includes(hoy);
+    await marcarHabito(h, hoy, !on);
     h.registros = on ? h.registros.filter(d => d !== hoy) : [...h.registros, hoy];
-    await db.put('habits', h);
     if (!on) { navigator.vibrate?.(30); const r = racha(h); if (r > 1) toast(`🔥 ¡Racha de ${r} días!`); }
     refrescar();
   }));
@@ -178,37 +179,60 @@ function gestionarHabitos(habits) {
   // Tras una semana seguida, se propone la alternativa más retadora del mismo propósito.
   const subir = h => {
     const sig = h.catalogo && racha(h) >= 7 ? siguienteNivel(h.catalogo) : null;
-    return sig && !tiene.has(sig.id) ? `<button class="btn sec chico" style="margin-top:6px" data-subir="${sig.id}">⬆️ ¿Subir de nivel? ${esc(sig.emoji)} ${esc(sig.titulo)}</button>` : '';
+    return sig && !tiene.has(sig.id) ? `<button class="btn sec chico" style="margin-top:6px" data-subir="${sig.id}" data-momento-de="${h.id}">⬆️ ¿Subir de nivel? ${esc(sig.emoji)} ${esc(sig.titulo)}</button>` : '';
   };
+  const MOMENTO = { manana: 'por la mañana', tarde: 'por la tarde', noche: 'por la noche' };
+  const enHorario = h => (h.goalId ? `📅 ${frecuenciaTxt(h.veces || 7)} ${MOMENTO[h.momento] || ''}`
+    : `<button class="btn gris chico" style="margin-top:6px" data-horario="${h.id}">📅 Ponerlo en el horario</button>`);
   const { el, close } = sheet('Hábitos', `
     <button class="btn ancho" id="descubrir" style="margin-bottom:12px">✨ Descubrir hábitos saludables</button>
     ${habits.length ? `<div class="card plano"><ul class="lista">${habits.map(h => `
       <li><span style="font-size:24px">${esc(h.emoji || '✨')}</span><div class="grow"><div class="t">${esc(h.titulo)}</div>
-      <div class="mini">🔥 Racha: ${racha(h)} días · ${h.registros.length} días en total</div>${subir(h)}</div>
+      <div class="mini">🔥 Racha: ${racha(h)} días · ${h.registros.length} días en total</div>
+      <div class="mini">${enHorario(h)}</div>${subir(h)}
+      ${h.goalId ? '' : `<div class="elegir-momento" data-pregunta="${h.id}" hidden><b class="mini">¿Cuándo lo quieres hacer?</b>${botonesMomento('manana', `data-momento-horario="${h.id}" data-momento`)}</div>`}</div>
       <button class="btn-icon" data-calendario="${h.id}" aria-label="Ver calendario">📅</button>
       <button class="btn-icon" data-borrar="${h.id}" aria-label="Borrar">🗑</button></li>`).join('')}</ul></div>` : ''}
     <form class="card">
       <h3 style="margin-bottom:10px">O escribe el tuyo</h3>
       <div class="fila"><input name="emoji" maxlength="4" placeholder="💧" style="width:64px;text-align:center">
-      <input name="titulo" required placeholder="Ej.: Beber 2 L de agua"></div>
-      <button class="btn ancho" style="margin-top:10px">Añadir</button>
+      <input name="titulo" required placeholder="Ej.: Estirar la espalda"></div>
+      <div class="grid2" style="margin-top:10px">
+        <label class="campo"><span>¿Cuándo?</span><select name="momento">${opciones([['manana', '☀️ Mañana'], ['tarde', '🌆 Tarde'], ['noche', '🌙 Noche']], 'manana')}</select></label>
+        <label class="campo"><span>¿Cuánto tiempo?</span><select name="min">${opciones([5, 10, 15, 20, 30, 45, 60].map(m => [m, fmtHoras(m)]), 10)}</select></label>
+      </div>
+      <button class="btn ancho">Añadir y ponerlo en el horario</button>
     </form>`);
   el.querySelector('form').addEventListener('submit', async e => {
     e.preventDefault();
     const d = formData(e.target);
-    await db.put('habits', { id: uid(), titulo: d.titulo, emoji: d.emoji || '✨', registros: [], creado: hoyISO() });
+    const { habito } = await crearHabito({ titulo: d.titulo, emoji: d.emoji || '✨', min: Number(d.min), veces: 7 }, d.momento);
     close(); refrescar();
+    setTimeout(() => mostrarHabitoCreado(habito), 260);
   });
   el.querySelector('#descubrir').addEventListener('click', () => { close(); setTimeout(abrirCatalogoHabitos, 260); });
   el.querySelectorAll('[data-subir]').forEach(b => b.addEventListener('click', async () => {
-    const h = await anadirHabitoCatalogo(b.dataset.subir);
-    toast(`⬆️ ¡Nuevo reto! ${h.emoji} ${h.titulo}`);
+    // El nuevo reto va a la misma hora del día que el hábito que ya domina.
+    const momento = habits.find(h => h.id === b.dataset.momentoDe)?.momento;
+    const sig = siguienteNivel(habits.find(h => h.id === b.dataset.momentoDe).catalogo);
+    const { habito } = await crearHabito(sig, momento || sig.cuando);
+    close(); refrescar();
+    setTimeout(() => mostrarHabitoCreado(habito), 260);
+  }));
+  el.querySelectorAll('[data-horario]').forEach(b => b.addEventListener('click', () => {
+    el.querySelector(`[data-pregunta="${b.dataset.horario}"]`).hidden = false;
+    b.hidden = true;
+  }));
+  el.querySelectorAll('[data-momento-horario]').forEach(b => b.addEventListener('click', async () => {
+    const h = habits.find(x => x.id === b.dataset.momentoHorario);
+    await ponerEnHorario(h, b.dataset.momento);
+    toast(`📅 «${h.titulo}» ya está en tu horario`);
     close(); refrescar();
   }));
   el.querySelectorAll('[data-calendario]').forEach(b => b.addEventListener('click', () => { close(); setTimeout(() => abrirCalendarioHabito(b.dataset.calendario), 260); }));
   el.querySelectorAll('[data-borrar]').forEach(b => b.addEventListener('click', async () => {
-    if (!confirm('¿Borrar este hábito y su racha?')) return;
-    await db.del('habits', b.dataset.borrar);
+    if (!confirm('¿Borrar este hábito, su racha y sus bloques del horario?')) return;
+    await borrarHabito(habits.find(h => h.id === b.dataset.borrar));
     close(); refrescar();
   }));
 }

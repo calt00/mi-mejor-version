@@ -68,17 +68,19 @@ export function generarSemana({ fecha, goals, blocks, disponibilidad, prefs, set
     // Con días elegidos, una sesión por cada uno de esos días que aún quedan. Si no, redondeado a sesiones
     // completas (al menos una), para no crear sesiones de 21 minutos.
     const objetivo = g.dias?.length
-      ? (fraccion < 1 ? sesion * fechas.filter(f => g.dias.includes(weekday(f))).length : g.horasSemana * 60)
+      ? sesion * fechas.filter(f => g.dias.includes(weekday(f))).length
       : fraccion < 1 ? Math.max(sesion, Math.round(g.horasSemana * 60 * fraccion / sesion) * sesion) : g.horasSemana * 60;
     resto[g.id] = objetivo - yaPuesto;
   }
 
+  const deHabito = new Set(goals.filter(g => g.esHabito).map(g => g.id));
   const dias = fechas.map(f => {
     const ocupados = conservados.filter(b => b.fecha === f);
     return {
       fecha: f,
       libres: huecosDia(f, disponibilidad, ocupados, descanso),
-      carga: ocupados.filter(b => b.goalId).reduce((a, b) => a + duracion(b), 0),
+      // Los hábitos no cuentan para el máximo de horas al día de objetivos.
+      carga: ocupados.filter(b => b.goalId && !deHabito.has(b.goalId)).reduce((a, b) => a + duracion(b), 0),
       porGoal: Object.fromEntries(ocupados.filter(b => b.goalId).map(b => [b.goalId, 1])),
     };
   });
@@ -91,7 +93,7 @@ export function generarSemana({ fecha, goals, blocks, disponibilidad, prefs, set
     const h = habitual[g.id];
     let mejor = null;
     dias.forEach((d, idx) => {
-      if (d.carga + L > maxDia) return;
+      if (!g.esHabito && d.carga + L > maxDia) return;
       if (g.dias?.length && (!g.dias.includes(weekday(d.fecha)) || d.porGoal[g.id])) return; // solo los días que eligió, una vez cada uno
       for (const [s, e] of d.libres) {
         if (e - s < L) continue;
@@ -116,7 +118,8 @@ export function generarSemana({ fecha, goals, blocks, disponibilidad, prefs, set
   while (progreso) {
     progreso = false;
     for (const g of activos) {
-      if (resto[g.id] < 15) continue;
+      // Lo que falta por colocar se ignora si es menos de 15 min (o de una sesión, si son cortas: hábitos de 5 min).
+      if (resto[g.id] < Math.min(15, g.sesionMin || 15)) continue;
       const base = Math.min(g.sesionMin || prefs.sesionMin || 60, resto[g.id]);
       let hueco = null, L = base;
       for (const prueba of [base, Math.max(30, Math.round(base / 2 / 15) * 15)]) {
@@ -131,7 +134,7 @@ export function generarSemana({ fecha, goals, blocks, disponibilidad, prefs, set
         fijado: false, hecho: false, importante: esImportante(g, settings), frase: '', origen: 'auto',
       });
       d.libres = recortar(d.libres, [ini - descanso, ini + L + descanso]);
-      d.carga += L;
+      if (!g.esHabito) d.carga += L;
       d.porGoal[g.id] = 1;
       habitual[g.id] ??= ini;
       resto[g.id] -= L;

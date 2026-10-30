@@ -138,14 +138,14 @@ export function objetivosDe(e, existentes, hoy) {
   });
   const nuevos = guardar.filter(g => !porId.has(g.id));
   const tareas = nuevos.flatMap(g => primerosPasos(g.titulo).pasos.slice(0, 3).map((p, k) => ({ id: uid() + k, goalId: g.id, titulo: p.titulo, hecho: false, creado: Date.now() + k })));
-  const archivar = existentes.filter(g => !g.archivado && !guardar.some(x => x.id === g.id)).map(g => ({ ...g, archivado: true }));
+  const archivar = existentes.filter(g => !g.archivado && !g.esHabito && !guardar.some(x => x.id === g.id)).map(g => ({ ...g, archivado: true }));
   return { guardar, archivar, tareas };
 }
 
 /** Respuestas guardadas + objetivos actuales (por si se han editado en la pestaña Objetivos). */
 export function estadoDesde(guardado, goals) {
   const e = { ...estadoInicial(), ...guardado };
-  const activos = goals.filter(g => !g.archivado);
+  const activos = goals.filter(g => !g.archivado && !g.esHabito); // los hábitos se gestionan aparte
   e.objetivos = activos.map(g => ({ id: g.id, titulo: g.titulo, horasSemana: Number(g.horasSemana) || 1, dias: g.dias?.length ? g.dias : [...TODOS_LOS_DIAS], momento: g.momento || 'cualquiera' }));
   return e;
 }

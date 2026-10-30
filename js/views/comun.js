@@ -5,6 +5,7 @@ import { esc, sheet, formData, toast, refrescar, hoyISO, addDays, toMin, toHHMM,
 import { prepararEnvio, abrirAtajo } from '../iphone.js';
 import { esImportante } from '../scheduler.js';
 import { abrirFoco } from './foco.js';
+import { marcarBloque } from '../rutinas.js';
 
 export const duracionMin = b => toMin(b.fin) - toMin(b.inicio);
 
@@ -54,7 +55,7 @@ export function conectarBloques(root, bloques) {
   root.querySelectorAll('[data-hecho]').forEach(btn => btn.addEventListener('click', async e => {
     e.stopPropagation();
     const b = bloques.find(x => x.id === btn.dataset.hecho);
-    await db.put('blocks', { ...b, hecho: !b.hecho });
+    await marcarBloque(b, !b.hecho); // si es de un hábito, también se marca el hábito
     if (!b.hecho) { navigator.vibrate?.(30); toast('¡Hecho! Un paso más. 💪'); }
     refrescar();
   }));
