@@ -27,6 +27,7 @@
     import { normalizarPlan, cruzarConExistentes, unirFranjas, normalizarTurnos } from '../js/plan.js';
     import { interpretarTexto, tipoTurno } from '../js/interprete.js';
     import { entender } from '../js/agente.js';
+    import { FAMILIAS, TODOS as HABITOS, CATEGORIAS_HABITO, filtrar as filtrarHabitos, sugerir as sugerirHabitos, siguienteNivel } from '../js/habitos.js';
     import { estadoInicial, libresDe, sesionDe, encaje, minutosLibresPorDia, objetivosDe, inicioCiclo, maxHorasDiaDe } from '../js/configuracion.js';
 
     const lista = document.getElementById('lista');
@@ -575,6 +576,28 @@ Cobro 1.500 € al mes el día 28, pago 550 € de alquiler y quiero ahorrar 2.0
       igual(nuevos.map(b => weekday(b.fecha)).sort().join(), '1,3');
     });
 
+    // ---------- Catálogo de hábitos ----------
+    prueba('Hábitos: catálogo completo y bien formado', () => {
+      igual(new Set(HABITOS.map(h => h.id)).size, HABITOS.length, 'ids repetidos');
+      verdad(HABITOS.length >= 40, `solo hay ${HABITOS.length}`);
+      for (const h of HABITOS) verdad(h.titulo && h.emoji && h.porque && h.empezar && [1, 2, 3].includes(h.dificultad) && [0, 1, 2].includes(h.coste), `incompleto: ${h.id}`);
+      for (const f of FAMILIAS) verdad(f.alternativas.length >= 2, `«${f.nombre}» necesita alternativas`);
+      for (const [cat] of CATEGORIAS_HABITO) verdad(filtrarHabitos({ cat, dificultad: 1, coste: 0 }).length, `falta uno fácil y gratis en ${cat}`);
+      verdad([1, 2, 3].every(d => filtrarHabitos({ dificultad: d }).length) && [0, 1, 2].every(c => filtrarHabitos({ coste: c }).length), 'faltan niveles');
+    });
+
+    prueba('Hábitos: sugerencias distintas, sin repetir lo que ya tienes', () => {
+      let n = 0;
+      const azar = () => ((n = (n * 9301 + 49297) % 233280) / 233280);
+      const s = sugerirHabitos(3, { yaTiene: ['caminar-10', 'Beber 2 L de agua'], azar });
+      igual(s.length, 3);
+      igual(new Set(s.map(h => h.familia)).size, 3, 'familias distintas');
+      verdad(!s.some(h => h.familia === 'caminar' || h.familia === 'agua'), `repite algo que ya tiene: ${s.map(h => h.id)}`);
+      verdad(sugerirHabitos(3, { dificultad: 1, coste: 0, azar }).every(h => h.dificultad === 1 && h.coste === 0), 'respeta los filtros');
+      igual(siguienteNivel('caminar-10')?.id, 'caminar-30', 'subir de nivel');
+      igual(siguienteNivel('pasos-10000'), null, 'ya es el más retador');
+    });
+
     // ---------- Asistente: entiende las órdenes ----------
     prueba('Asistente: reconoce cada tipo de orden', () => {
       const casos = [
@@ -588,6 +611,8 @@ Cobro 1.500 € al mes el día 28, pago 550 € de alquiler y quiero ahorrar 2.0
         ['he gastado 5 € en café', 'gasto'], ['aparto 20 € para el viaje', 'ahorro'],
         ['no tengo ganas', 'animo'], ['¿cómo voy?', 'progreso'], ['reorganiza mi semana', 'replanificar'],
         ['quiero empezar a correr', 'objetivo'], ['ayuda', 'ayuda'], ['gracias', 'gracias'], ['asdfgh', 'desconocido'],
+        ['añade inglés', 'anadir'], ['pon una sesión de gimnasio', 'anadir'],
+        ['recomiéndame un hábito', 'habito'], ['quiero un hábito fácil y gratis', 'habito'], ['añade un hábito de beber agua', 'habito'],
       ];
       const mal = casos.filter(([frase, tipo]) => entender(frase, HOY_T).tipo !== tipo).map(([frase, tipo]) => `«${frase}» → ${entender(frase, HOY_T).tipo} (esperado ${tipo})`);
       verdad(!mal.length, mal.join('\n'));

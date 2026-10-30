@@ -9,6 +9,7 @@ import { generarSemana, huecosDia, ordenarBloques } from './scheduler.js';
 import { progresoDiario, mediaSerie, mejorRacha } from './progreso.js';
 import { estadoMeta } from './finanzas.js';
 import { frasesLocales } from './frases.js';
+import { TODOS as HABITOS_CATALOGO, DIFICULTAD, COSTE, sugerir, habitoPorId, habitoNuevo } from './habitos.js';
 
 const TURNO_TXT = { manana: 'mañana', tarde: 'tarde', noche: 'noche' };
 const DIA_RE = /\b(lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/;
@@ -101,6 +102,7 @@ export function entender(texto, hoy = hoyISO()) {
   if ((m = t.match(/(?:esta semana|la semana que viene|la proxima semana|me han cambiado (?:el )?turno|cambio de turno|ahora)[^.]{0,30}?\b(manana|tarde|noche)\b/)) && /turno|estoy de|me toca|trabajo de|semana/.test(t))
     return tipo('turno', { turno: m[1], siguiente: /que viene|proxima/.test(t) });
 
+  if (/\bhabitos?\b/.test(t)) return tipo('habito');
   if (/(no tengo ganas|cansad|agotad|desmotivad|me da pereza|no me apetece|agobiad|estresad|bajon|sin energia|no puedo mas|reventad)/.test(t)) return tipo('animo');
   if (/(como voy|mi progreso|que tal voy|estadisticas|como lo llevo|resumen de la semana|cuanto llevo)/.test(t)) return tipo('progreso');
   if (/(reorganiza|replanifica|rehaz|regenera|reparte|organiza(me)?)\b.*\b(semana|horario|dia|todo)/.test(t)) return tipo('replanificar');
@@ -114,7 +116,7 @@ export function entender(texto, hoy = hoyISO()) {
   if (/(retrasa|atrasa|mas tarde|despues|adelanta)\b/.test(t) && (o.duracion || o.hora)) return tipo('retrasar', { adelantar: /adelanta/.test(t) });
   if (/\b(no puedo|no me da tiempo|no llego|pasa(lo|la|los)?|mueve(lo|la)?|aplaza(lo|la)?|cambia(lo|la)?|dejalo|dejala|reprograma(lo|la)?|lo hago otro dia)\b/.test(t)) return tipo('mover');
   if (/(anade|pon(me|lo)?|apunta(me)?|mete(me)?|reserva|agenda|programa|quiero (estudiar|hacer|practicar|ir|leer|entrenar|correr)|voy a (estudiar|hacer|practicar|ir|leer|entrenar|correr))\b/.test(t)
-    && (o.duracion || o.rango || o.hora || o.fecha)) return tipo('anadir');
+    && (o.duracion || o.rango || o.hora || o.fecha || /^(anade|pon(me)?|apunta(me)?|mete(me)?|agenda|programa|reserva)\b/.test(t))) return tipo('anadir');
   if (/(quiero (empezar|aprender|ponerme|sacarme|mejorar|dejar)|nuevo objetivo|mi objetivo es|me gustaria (empezar|aprender|mejorar))/.test(t)) return tipo('objetivo');
   if (/(que (me )?toca|que tengo|mi dia|mi plan|plan de|agenda|que hago|siguiente|que sigue|horario de|hola|buenas|buenos dias|que hay)/.test(t)
     || /^[¿]?(y )?(hoy|manana|pasado manana|el (lunes|martes|miercoles|jueves|viernes|sabado|domingo))\s*\??$/.test(t)) return tipo('dia', { relativo: /\b(dia siguiente|el siguiente|y despues|y luego)\b/.test(t) });
@@ -245,6 +247,7 @@ const ACCIONES = {
 - **«Hoy tengo libre de 5 a 8»**, «mañana libro», «el sábado trabajo de 9 a 14»
 - **«Esta semana estoy de tarde»**
 - **«He gastado 5 € en café»**, «aparto 20 € para el viaje»
+- **«Recomiéndame un hábito»**, «un hábito fácil y gratis»
 - **«¿Cómo voy?»**, «reorganiza mi semana», «no tengo ganas»`,
     botones: [{ etiqueta: '📅 ¿Qué me toca hoy?', orden: { tipo: 'dia' } }] };
   },
@@ -346,6 +349,17 @@ const ACCIONES = {
   async anadir(o, reg, hoy) {
     const goals = (await db.all('goals')).filter(g => !g.archivado);
     const goal = mejor(o.texto, goals, g => g.titulo);
+    // Sin día: se pregunta (el día del que se hablaba sale el primero).
+    if (!o.fecha && !o.diaElegido) {
+      const titulo = goal?.titulo || tituloLibre(o.texto);
+      const dias = [...new Set([o.dia, hoy, ...[1, 2, 3, 4, 5, 6].map(n => addDays(hoy, n))].filter(Boolean))].slice(0, 7);
+      const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+      const { dia, ...resto } = o;
+      return {
+        texto: `¿Para qué día quieres añadir «${titulo}»${o.rango ? ` (de ${o.rango.inicio} a ${o.rango.fin})` : o.hora ? ` (a las ${o.hora})` : ''}?`,
+        botones: dias.map(f => ({ etiqueta: `${f === dia && f !== hoy ? '📌 ' : ''}${cap(etiquetaDia(f, hoy))}`, orden: { ...resto, tipo: 'anadir', fecha: f, diaElegido: true } })),
+      };
+    }
     const fecha = o.fecha || o.dia || hoy;
     const dur = o.rango ? toMin(o.rango.fin) - toMin(o.rango.inicio) : o.duracion || goal?.sesionMin || (await getPrefs()).sesionMin || 60;
     let destino;
@@ -490,6 +504,32 @@ const ACCIONES = {
       rachas.length ? `Rachas: ${rachas.map(([h, , r]) => `${h.emoji || '✨'} ${r} ${r === 1 ? 'día' : 'días'}`).join(' · ')} 🔥` : '',
       pct != null ? (pct >= 80 ? '¡Vas genial! 🌟' : pct >= 50 ? 'Vas bien, sigue así. 💪' : 'Poco a poco: lo importante es no parar. 🌱') : '',
     ].filter(Boolean).join('\n'), botones: [{ etiqueta: '📈 Ver gráficas', orden: { tipo: 'ir', destino: '#progreso' } }] };
+  },
+
+  async habito(o) {
+    const habits = await db.all('habits');
+    const yaTiene = habits.flatMap(h => [h.catalogo, h.titulo]).filter(Boolean);
+    const dificultad = /\b(facil|faciles|sencill\w*|poco a poco|para empezar)\b/.test(o.texto) ? 1 : /\b(dificil|dificiles|reto|retador\w*|exigente)\b/.test(o.texto) ? 3 : null;
+    const coste = /\b(gratis|gratuito\w*|sin gastar|sin dinero|barato\w*)\b/.test(o.texto) ? 0 : null;
+    // Si nombra uno («un hábito de beber agua»), ese va primero.
+    const libres = HABITOS_CATALOGO.filter(h => !yaTiene.includes(h.id) && !yaTiene.includes(h.titulo));
+    const nombrado = /\bhabitos?\s+(de|para)\b/.test(o.texto) ? mejor(o.texto.replace(/\bhabitos?\b/g, ''), libres, h => `${h.titulo} ${h.porque}`) : null;
+    const lista = [...(nombrado ? [nombrado] : []), ...sugerir(3, { yaTiene: [...yaTiene, ...(nombrado ? [nombrado.id] : [])], dificultad, coste })].slice(0, 3);
+    const verTodos = { etiqueta: '🔍 Ver todos los hábitos', orden: { tipo: 'catalogoHabitos' } };
+    if (!lista.length) return { texto: '¡Ya tienes un hábito de cada tipo con esas condiciones! 🎉 Mira el catálogo para subir de nivel.', botones: [verTodos] };
+    const dif = Object.fromEntries(DIFICULTAD), cos = Object.fromEntries(COSTE);
+    return {
+      texto: `Te propongo ${lista.length === 1 ? 'este' : 'estos'}${dificultad === 1 ? ' fáciles' : dificultad === 3 ? ' retadores' : ''}${coste === 0 ? ' y gratis' : ''}:\n${lista.map(h => `- ${h.emoji} **${h.titulo}** (${dif[h.dificultad].toLowerCase()}, ${cos[h.coste].toLowerCase()}): ${h.porque}`).join('\n')}\n¿Cuál quieres probar?`,
+      botones: [...lista.map(h => ({ etiqueta: `+ ${h.emoji} ${h.titulo}`, orden: { tipo: 'crearHabito', id: h.id } })), verTodos],
+    };
+  },
+
+  async crearHabito(o, reg, hoy) {
+    const h = habitoPorId(o.id);
+    if (!h) return { texto: 'No encuentro ese hábito.' };
+    if ((await db.all('habits')).some(x => x.catalogo === h.id)) return { texto: `Ya tienes «${h.titulo}». 👍` };
+    await reg.put('habits', habitoNuevo(h, hoy));
+    return { texto: `${h.emoji} ¡Añadido «${h.titulo}»! Lo verás en «Hoy» para marcarlo cada día.\n👉 **Cómo empezar:** ${h.empezar}` };
   },
 
   async desconocido(o) {

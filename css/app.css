@@ -379,6 +379,11 @@ input[type="checkbox"] { width: auto; }
 
 /* ----- Cuestionario paso a paso ----- */
 .en-pruebas { border: 1.5px dashed var(--sep); box-shadow: none; }
+.habito-cat { padding: 12px 0; border-bottom: 0.5px solid var(--sep); }
+.habito-cat:last-child { border-bottom: 0; }
+.habito-cat .t { font-weight: 700; }
+.habito-cat .tags { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+.habito-cat-emoji { font-size: 28px; line-height: 1; flex: none; }
 .dia-check { position: relative; cursor: pointer; }
 .dia-check input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .dia-check span { display: grid; place-items: center; min-height: 44px; border: 2px solid var(--sep); border-radius: 12px; font-weight: 700; background: var(--card); }

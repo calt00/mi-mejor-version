@@ -12,6 +12,8 @@ import { comprobarLogros } from '../logros.js';
 import { abrirRevision } from './revision.js';
 import { abrirCalendarioHabito } from './progreso.js';
 import { exportar } from './perfil.js';
+import { abrirCatalogoHabitos, anadirHabitoCatalogo } from './habitos.js';
+import { siguienteNivel } from '../habitos.js';
 
 const DIAS_ENTRE_COPIAS = 7;
 
@@ -106,7 +108,8 @@ export async function render(root) {
       const on = h.registros.includes(hoy), r = racha(h);
       return `<div class="habito ${on ? 'on' : ''}" data-habito="${h.id}" role="button" aria-pressed="${on}">
         <div class="e">${esc(h.emoji || '✨')}</div><div class="t">${esc(h.titulo)}</div><div class="r">${r ? `🔥 ${r}` : '&nbsp;'}</div></div>`;
-    }).join('')}</div>` : '<div class="card vacio">Añade hábitos diarios (beber agua, leer, meditar…) y mantén tu racha. 🔥</div>'}
+    }).join('')}</div>` : `<div class="card vacio">Pequeños hábitos diarios (beber agua, caminar, leer…) y mantén tu racha. 🔥
+      <div class="acciones" style="justify-content:center"><button class="btn chico" id="descubrir">✨ Descubrir hábitos</button></div></div>`}
 
     <div class="seccion"><h2>Tu progreso</h2><a class="btn sec chico" href="#progreso">Ver más</a></div>
     <a class="card" href="#progreso" style="display:block;color:inherit">
@@ -128,6 +131,7 @@ export async function render(root) {
   root.querySelector('#enviar').addEventListener('click', () => abrirEnvioIphone('hoy'));
   root.querySelector('#nuevo-bloque').addEventListener('click', () => abrirEditorBloque(null, { fecha: hoy }));
   root.querySelector('#habitos').addEventListener('click', () => gestionarHabitos(habits));
+  root.querySelector('#descubrir')?.addEventListener('click', abrirCatalogoHabitos);
   root.querySelectorAll('[data-habito]').forEach(el => el.addEventListener('click', async () => {
     const h = habits.find(x => x.id === el.dataset.habito);
     const on = h.registros.includes(hoy);
@@ -170,14 +174,21 @@ function conectarAsistente(caja) {
 }
 
 function gestionarHabitos(habits) {
+  const tiene = new Set(habits.map(h => h.catalogo).filter(Boolean));
+  // Tras una semana seguida, se propone la alternativa más retadora del mismo propósito.
+  const subir = h => {
+    const sig = h.catalogo && racha(h) >= 7 ? siguienteNivel(h.catalogo) : null;
+    return sig && !tiene.has(sig.id) ? `<button class="btn sec chico" style="margin-top:6px" data-subir="${sig.id}">⬆️ ¿Subir de nivel? ${esc(sig.emoji)} ${esc(sig.titulo)}</button>` : '';
+  };
   const { el, close } = sheet('Hábitos', `
+    <button class="btn ancho" id="descubrir" style="margin-bottom:12px">✨ Descubrir hábitos saludables</button>
     ${habits.length ? `<div class="card plano"><ul class="lista">${habits.map(h => `
       <li><span style="font-size:24px">${esc(h.emoji || '✨')}</span><div class="grow"><div class="t">${esc(h.titulo)}</div>
-      <div class="mini">🔥 Racha: ${racha(h)} días · ${h.registros.length} días en total</div></div>
+      <div class="mini">🔥 Racha: ${racha(h)} días · ${h.registros.length} días en total</div>${subir(h)}</div>
       <button class="btn-icon" data-calendario="${h.id}" aria-label="Ver calendario">📅</button>
       <button class="btn-icon" data-borrar="${h.id}" aria-label="Borrar">🗑</button></li>`).join('')}</ul></div>` : ''}
     <form class="card">
-      <h3 style="margin-bottom:10px">Nuevo hábito</h3>
+      <h3 style="margin-bottom:10px">O escribe el tuyo</h3>
       <div class="fila"><input name="emoji" maxlength="4" placeholder="💧" style="width:64px;text-align:center">
       <input name="titulo" required placeholder="Ej.: Beber 2 L de agua"></div>
       <button class="btn ancho" style="margin-top:10px">Añadir</button>
@@ -188,6 +199,12 @@ function gestionarHabitos(habits) {
     await db.put('habits', { id: uid(), titulo: d.titulo, emoji: d.emoji || '✨', registros: [], creado: hoyISO() });
     close(); refrescar();
   });
+  el.querySelector('#descubrir').addEventListener('click', () => { close(); setTimeout(abrirCatalogoHabitos, 260); });
+  el.querySelectorAll('[data-subir]').forEach(b => b.addEventListener('click', async () => {
+    const h = await anadirHabitoCatalogo(b.dataset.subir);
+    toast(`⬆️ ¡Nuevo reto! ${h.emoji} ${h.titulo}`);
+    close(); refrescar();
+  }));
   el.querySelectorAll('[data-calendario]').forEach(b => b.addEventListener('click', () => { close(); setTimeout(() => abrirCalendarioHabito(b.dataset.calendario), 260); }));
   el.querySelectorAll('[data-borrar]').forEach(b => b.addEventListener('click', async () => {
     if (!confirm('¿Borrar este hábito y su racha?')) return;

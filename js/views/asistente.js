@@ -2,6 +2,7 @@
 import { db } from '../db.js';
 import { esc, toast, uid, miniMarkdown, $ } from '../util.js';
 import { entender, ejecutar, deshacer, mensajesProactivos } from '../agente.js';
+import { abrirCatalogoHabitos } from './habitos.js';
 
 const SUGERENCIAS = [
   ['📅 ¿Qué me toca hoy?', '¿Qué me toca hoy?'], ['✅ Ya lo he hecho', 'Ya lo he hecho'], ['😮‍💨 Hoy no puedo', 'Hoy no puedo'],
@@ -60,6 +61,7 @@ export function conectarMensajes(cont, mensajes, alResponder, alDeshacer = null)
       div.outerHTML = mensajeHTML(m);
       conectarMensajes(cont, mensajes, alResponder, alDeshacer);
       if (orden.tipo === 'ir') { location.hash = orden.destino; return; }
+      if (orden.tipo === 'catalogoHabitos') { abrirCatalogoHabitos(); return; }
       alResponder(await responderOrden({ texto: '', ...orden }));
     }));
     div.querySelector('[data-deshacer]')?.addEventListener('click', async () => {
