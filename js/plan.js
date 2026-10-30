@@ -95,7 +95,8 @@ export function normalizarTurnos(t) {
     const h = t.horarios?.[tipo];
     if (h && hora(h.inicio) && hora(h.fin)) horarios[tipo] = { inicio: hora(h.inicio), fin: hora(h.fin) };
   }
-  return { rotativo: true, patron, referencia: t.referencia, inicioCiclo: Math.round(num(t.inicioCiclo, 0, 6, 0)), horarios, disponibilidad };
+  const diasTrabajo = Array.isArray(t.diasTrabajo) ? t.diasTrabajo.filter(d => Number.isInteger(d) && d >= 0 && d <= 6) : null;
+  return { rotativo: true, patron, referencia: t.referencia, inicioCiclo: Math.round(num(t.inicioCiclo, 0, 6, 0)), diasTrabajo, horarios, disponibilidad };
 }
 
 /** Marca qué elementos del plan ya existen (mismo título), para actualizarlos en vez de duplicarlos. */

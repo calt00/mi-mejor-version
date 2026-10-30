@@ -16,7 +16,7 @@
   <div id="resumen">Ejecutando…</div>
   <ul id="lista"></ul>
   <script type="module">
-    import { generarSemana, validarBloques } from '../js/scheduler.js';
+    import { generarSemana } from '../js/scheduler.js';
     import { resumenMes, estadoMeta, recomendaciones, regla503020, evaluarReto } from '../js/finanzas.js';
     import { etapa, escala } from '../js/cerdito.js';
     import { miniMarkdown, toMin, addDays, weekStart, hoyISO, weekday } from '../js/util.js';
@@ -26,6 +26,7 @@
     import { barrasSVG, calendarioHTML } from '../js/grafica.js';
     import { normalizarPlan, cruzarConExistentes, unirFranjas, normalizarTurnos } from '../js/plan.js';
     import { interpretarTexto, tipoTurno } from '../js/interprete.js';
+    import { entender } from '../js/agente.js';
 
     const lista = document.getElementById('lista');
     let ok = 0, ko = 0;
@@ -175,6 +176,15 @@
       igual(`${nuevos[0].inicio}-${nuevos[0].fin}`, '21:00-21:30', 'pegado al final del hueco y dentro de la noche');
     });
 
+    prueba('Generador: a mitad de semana reparte solo la parte de los días que quedan', () => {
+      const hoyT = hoyISO();
+      const quedan = 7 - weekday(hoyT);
+      const todoElDia = Array.from({ length: 7 }, () => [{ inicio: '00:00', fin: '23:59' }]);
+      const { nuevos } = generarSemana({ fecha: hoyT, goals: [{ id: 'Z', titulo: 'Z', horasSemana: 7, prioridad: 2, sesionMin: 60 }], blocks: [], disponibilidad: todoElDia, prefs: { ...prefs, maxHorasDia: 24 }, settings });
+      const min = minutos(nuevos, 'Z');
+      verdad(min <= quedan * 60 && min >= (quedan - 1) * 60, `quedan ${quedan} días: ${min} min`);
+    });
+
     prueba('Generador: avisa si no caben las horas', () => {
       const { avisos } = generarSemana({ fecha: lunes, goals: [{ id: 'X', titulo: 'Mucho', horasSemana: 40, prioridad: 2 }], blocks: [], disponibilidad: disp, prefs, settings });
       verdad(avisos.length === 1 && avisos[0].includes('Mucho'), JSON.stringify(avisos));
@@ -187,19 +197,6 @@
       verdad(!borrar.includes('F') && borrar.includes('S'), `borrar = ${borrar}`);
       igual(minutos(nuevos, 'A'), 120, 'Inglés restante tras 2 h fijadas');
       verdad(sinSolapes([...nuevos, fijo]), 'solapa con el fijado');
-    });
-
-    prueba('Validación: descarta solapes y horas inválidas; avisa fuera de disponibilidad', () => {
-      const fijos = [{ fecha: lunes, inicio: '18:00', fin: '19:00', titulo: 'Fijo' }];
-      const { validos, avisos } = validarBloques([
-        { fecha: lunes, inicio: '18:30', fin: '19:30', titulo: 'Choca' },
-        { fecha: lunes, inicio: '25:00', fin: '26:00', titulo: 'Mala hora' },
-        { fecha: lunes, inicio: '20:00', fin: '19:00', titulo: 'Al revés' },
-        { fecha: lunes, inicio: '10:00', fin: '11:00', titulo: 'Mañana' },
-        { fecha: lunes, inicio: '19:15', fin: '20:15', titulo: 'Bien' },
-      ], fijos, disp);
-      igual(validos.map(b => b.titulo).join(','), 'Mañana,Bien');
-      igual(avisos.length, 4, 'avisos');
     });
 
     // ---------- Progreso ----------
@@ -426,6 +423,62 @@ Cobro 1.500 € al mes el día 28, pago 550 € de alquiler y quiero ahorrar 2.0
       igual(r.raw.objetivos.find(x => x.titulo === 'Aprender inglés')?.horasSemana, 2, JSON.stringify(t));
     });
 
+    // Textos de personas muy distintas: lo importante es que no se coloque nada encima de sus obligaciones.
+    const persona = texto => {
+      const r = interpretarTexto(texto, { hoy: HOY_T });
+      const dia = n => r.raw.disponibilidad.filter(f => f.dia === n);
+      const choca = (n, a, b) => dia(n).some(f => toMin(f.inicio) < toMin(b) && toMin(f.fin) > toMin(a));
+      return { r, dia, choca, entendido: r.entendido.join(' '), objetivos: r.raw.objetivos.map(o => o.titulo) };
+    };
+
+    prueba('Personas: estudiante con clases y fútbol', () => {
+      const p = persona('Soy estudiante de 2º de bachillerato. Tengo clases de lunes a viernes de 8:00 a 14:30. Los martes y jueves voy a fútbol de 18:00 a 19:30. Quiero sacar buena nota en selectividad y aprender a programar. Me acuesto a las 23:00.');
+      verdad(p.entendido.includes('Tienes clase de lunes a viernes de 08:00 a 14:30'), p.entendido);
+      verdad(!p.choca(0, '07:30', '15:00') && !p.choca(1, '17:45', '19:45'), JSON.stringify([p.dia(0), p.dia(1)]));
+      verdad(p.objetivos.includes('Preparar la selectividad') && p.objetivos.includes('Aprender a programar'), p.objetivos);
+    });
+
+    prueba('Personas: jornada partida', () => {
+      const p = persona('Trabajo en una tienda de lunes a sábado de 10 a 14 y de 17 a 21. Los domingos libro. Quiero ir al gimnasio 3 veces por semana y leer antes de dormir.');
+      verdad(p.entendido.includes('de 10:00 a 14:00 y de 17:00 a 21:00'), p.entendido);
+      verdad(!p.choca(0, '09:30', '14:30') && !p.choca(0, '16:30', '21:30'), JSON.stringify(p.dia(0)));
+      verdad(p.dia(6).length >= 2, 'el domingo (libra) tiene tiempo libre');
+    });
+
+    prueba('Personas: turno de noche', () => {
+      const p = persona('Trabajo de noche de 22:00 a 6:00 de lunes a viernes. Duermo por la mañana hasta las 14:00. Quiero aprender inglés.');
+      verdad(p.entendido.includes('Te levantas sobre las 14:00'), p.entendido);
+      verdad(p.dia(0).length && p.dia(0).every(f => toMin(f.inicio) >= toMin('14:00') && toMin(f.fin) <= toMin('21:15')), JSON.stringify(p.dia(0)));
+      verdad(!p.choca(5, '06:00', '13:30'), `el sábado duerme tras el turno del viernes: ${JSON.stringify(p.dia(5))}`);
+    });
+
+    prueba('Personas: con hijos y teletrabajo', () => {
+      const p = persona('Tengo dos hijos. Los llevo al cole a las 9 y los recojo a las 16:30. Trabajo desde casa de 9:30 a 15:30. Me gustaría hacer deporte y aprender a cocinar.');
+      verdad(p.entendido.includes('Llevar a los niños') && p.entendido.includes('Recoger a los niños'), p.entendido);
+      verdad(!p.choca(0, '16:10', '16:55'), JSON.stringify(p.dia(0)));
+      verdad(p.objetivos.includes('Hacer deporte') && p.objetivos.includes('Aprender a cocinar'), p.objetivos);
+    });
+
+    prueba('Personas: horario distinto cada día', () => {
+      const p = persona('Los lunes y miércoles trabajo de 8 a 15, los martes y jueves de 14 a 21 y los viernes de 8 a 13. Quiero estudiar oposiciones 10 horas a la semana.');
+      verdad(p.entendido.includes('los martes y jueves de 14:00 a 21:00') && p.entendido.includes('los viernes de 08:00 a 13:00'), p.entendido);
+      verdad(!p.choca(1, '13:00', '21:30') && !p.choca(0, '07:15', '15:30'), JSON.stringify([p.dia(0), p.dia(1)]));
+      igual(p.r.raw.objetivos[0]?.horasSemana, 10);
+    });
+
+    prueba('Personas: sin trabajo', () => {
+      const p = persona('Ahora mismo no trabajo. Me levanto a las 9. Quiero buscar trabajo, aprender inglés y hacer ejercicio.');
+      verdad(p.objetivos.includes('Encontrar trabajo'), p.objetivos);
+      verdad(p.dia(0).some(f => toMin(f.inicio) < toMin('12:00')), 'tiene mañanas libres');
+      verdad(!p.r.supuestos.some(s => s.includes('horario general')), 'no le aplica el horario de alguien que trabaja');
+    });
+
+    prueba('Generador: pone las sesiones de un objetivo a la misma hora cada día', () => {
+      const disp = Array.from({ length: 7 }, (_, d) => (d % 2 ? [{ inicio: '10:00', fin: '12:00' }, { inicio: '17:00', fin: '22:00' }] : [{ inicio: '17:00', fin: '22:00' }]));
+      const { nuevos } = generarSemana({ fecha: lunes, goals: [{ id: 'R', titulo: 'R', horasSemana: 4, prioridad: 2, sesionMin: 60 }], blocks: [], disponibilidad: disp, prefs, settings });
+      igual(new Set(nuevos.map(b => b.inicio)).size, 1, `horas distintas: ${nuevos.map(b => b.fecha.slice(8) + ' ' + b.inicio)}`);
+    });
+
     prueba('Turnos: el generador usa las horas libres del turno de cada semana', () => {
       const turnos = { rotativo: true, patron: ['manana', 'tarde'], referencia: lunes, inicioCiclo: 0,
         disponibilidad: { manana: Array.from({ length: 7 }, () => [{ inicio: '18:00', fin: '20:00' }]), tarde: Array.from({ length: 7 }, () => [{ inicio: '09:00', fin: '11:00' }]) } };
@@ -435,6 +488,39 @@ Cobro 1.500 € al mes el día 28, pago 550 € de alquiler y quiero ahorrar 2.0
       const s2 = generarSemana({ fecha: addDays(lunes, 7), goals: g, blocks: [], disponibilidad: disp, prefs, settings }).nuevos;
       verdad(s1.length && s1.every(b => b.inicio >= '18:00'), `semana de mañana: ${s1.map(b => b.inicio)}`);
       verdad(s2.length && s2.every(b => b.fin <= '11:00'), `semana de tarde: ${s2.map(b => b.inicio)}`);
+    });
+
+    // ---------- Asistente: entiende las órdenes ----------
+    prueba('Asistente: reconoce cada tipo de orden', () => {
+      const casos = [
+        ['¿Qué me toca hoy?', 'dia'], ['¿y mañana?', 'dia'], ['hola', 'dia'],
+        ['Ya he hecho informática', 'hecho'], ['he bebido agua', 'hecho'], ['listo', 'hecho'],
+        ['hoy no puedo', 'mover'], ['pásalo a mañana', 'mover'], ['mueve inglés al viernes a las 18', 'mover'],
+        ['retrasa 30 minutos', 'retrasar'], ['cancela el gimnasio', 'cancelar'],
+        ['añade 1 hora de inglés el sábado a las 10', 'anadir'], ['pasado mañana pon media hora de lectura', 'anadir'],
+        ['hoy tengo libre de 5 a 8', 'libre'], ['mañana libro', 'libre'], ['el sábado trabajo de 9 a 14', 'ocupado'],
+        ['esta semana estoy de tarde', 'turno'], ['me han cambiado el turno a mañana', 'turno'],
+        ['he gastado 5 € en café', 'gasto'], ['aparto 20 € para el viaje', 'ahorro'],
+        ['no tengo ganas', 'animo'], ['¿cómo voy?', 'progreso'], ['reorganiza mi semana', 'replanificar'],
+        ['quiero empezar a correr', 'objetivo'], ['ayuda', 'ayuda'], ['gracias', 'gracias'], ['asdfgh', 'desconocido'],
+      ];
+      const mal = casos.filter(([frase, tipo]) => entender(frase, HOY_T).tipo !== tipo).map(([frase, tipo]) => `«${frase}» → ${entender(frase, HOY_T).tipo} (esperado ${tipo})`);
+      verdad(!mal.length, mal.join('\n'));
+    });
+
+    prueba('Asistente: saca días, horas, duraciones y dinero', () => {
+      let o = entender('mueve inglés al viernes a las 18', HOY_T);
+      igual(o.fecha, '2026-10-30'); igual(o.hora, '18:00');
+      o = entender('pásalo a mañana', HOY_T); igual(o.fecha, '2026-10-30', 'mañana = día siguiente');
+      o = entender('pasado mañana pon media hora de lectura', HOY_T); igual(o.fecha, '2026-10-31'); igual(o.duracion, 30);
+      o = entender('añade 1 hora de inglés el sábado a las 10', HOY_T); igual(o.fecha, '2026-10-31'); igual(o.duracion, 60); igual(o.hora, '10:00');
+      o = entender('hoy tengo libre de 5 a 8', HOY_T); igual(JSON.stringify(o.rango), '{"inicio":"17:00","fin":"20:00"}', '«de 5 a 8» es por la tarde');
+      o = entender('el sábado trabajo de 9 a 14', HOY_T); igual(JSON.stringify(o.rango), '{"inicio":"09:00","fin":"14:00"}');
+      o = entender('esta semana estoy de tarde', HOY_T); igual(o.turno, 'tarde'); igual(o.siguiente, false);
+      o = entender('la semana que viene me toca turno de mañana', HOY_T); igual(o.turno, 'manana'); igual(o.siguiente, true);
+      o = entender('he gastado 4,50 € en café', HOY_T); igual(o.importe, 4.5); igual(o.categoria, 'cafe');
+      o = entender('me he gastado 32 euros en la compra del mercadona', HOY_T); igual(o.categoria, 'supermercado');
+      o = entender('retrasa el inglés una hora', HOY_T); igual(o.duracion, 60);
     });
 
     // ---------- Otros ----------

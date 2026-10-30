@@ -216,6 +216,10 @@ input[type="checkbox"] { width: auto; }
 .accion { margin-top: 8px; padding: 10px; border-radius: 12px; background: var(--card2); font-size: 14px; }
 .accion .acciones { margin-top: 6px; }
 .accion.aplicada { opacity: .7; }
+.btn-deshacer { border: 0; background: none; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; padding: 2px 0; }
+.respuesta-asistente { margin-top: 10px; background: var(--card2); border-radius: 14px; padding: 10px 12px; font-size: 14px; }
+.respuesta-asistente p:last-child { margin-bottom: 0; }
+.respuesta-asistente ul { padding-left: 18px; margin: 4px 0; }
 .escribiendo span { display: inline-block; width: 7px; height: 7px; margin: 0 2px; border-radius: 50%; background: var(--text3); animation: puntos 1.2s infinite; }
 .escribiendo span:nth-child(2) { animation-delay: .15s; } .escribiendo span:nth-child(3) { animation-delay: .3s; }
 @keyframes puntos { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-5px); opacity: 1; } }

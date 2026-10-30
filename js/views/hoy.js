@@ -1,9 +1,9 @@
-// Pantalla «Hoy»: progreso del día, bloques, consejo del coach, hábitos y ahorro.
+// Pantalla «Hoy»: progreso del día, asistente, bloques, hábitos y ahorro.
 import { db, kvGet, kvSet } from '../db.js';
 import { getProfile } from '../datos.js';
-import { esc, hoyISO, fmtFecha, sheet, formData, toast, refrescar, uid, fmtEur, miniMarkdown, addDays, diasEntre } from '../util.js';
-import { bloqueHTML, conectarBloques, abrirEditorBloque, abrirEnvioIphone, racha, datosFinanzas, cargando, momentoBloque } from './comun.js';
-import { iaDisponible, consejoDelDia } from '../coach.js';
+import { esc, hoyISO, fmtFecha, sheet, formData, toast, refrescar, uid, fmtEur, addDays, diasEntre } from '../util.js';
+import { bloqueHTML, conectarBloques, abrirEditorBloque, abrirEnvioIphone, racha, datosFinanzas, momentoBloque } from './comun.js';
+import { responder, mensajeHTML, conectarMensajes } from './asistente.js';
 import { estadoMeta, recomendaciones } from '../finanzas.js';
 import { cerditoHTML } from '../cerdito.js';
 import { progresoDiario, mediaSerie, semanaPendiente } from '../progreso.js';
@@ -87,7 +87,14 @@ export async function render(root) {
         <div class="sub">Tus datos solo están en este iPhone. Guarda una copia en Archivos o iCloud Drive por si cambias de móvil.</div></div></div>
       <div class="acciones"><button class="btn chico" id="copia">Hacer copia ahora</button><button class="btn gris chico" id="copia-luego">Más tarde</button></div></div>` : ''}
 
-    <div class="card" id="consejo" hidden></div>
+    <div class="card" id="asistente">
+      <div class="fila sep"><b>🤖 Tu asistente</b><a class="mini" href="#asistente">Abrir chat ›</a></div>
+      <form id="orden" class="fila" style="margin-top:8px">
+        <input name="texto" placeholder="«hoy no puedo», «ya he hecho inglés», «5 € en café»…" autocomplete="off" enterkeyhint="send">
+        <button class="btn" style="flex:none;padding:0 14px" aria-label="Enviar">↑</button>
+      </form>
+      <div id="respuesta"></div>
+    </div>
 
     <div class="seccion"><h2>Tu día</h2></div>
     ${deHoy.length ? `<div class="bloques">${deHoy.map(b => bloqueHTML(b, goalsById)).join('')}</div>` : `
@@ -133,35 +140,32 @@ export async function render(root) {
   root.querySelector('#copia')?.addEventListener('click', async () => { if (await exportar()) refrescar(); });
   root.querySelector('#copia-luego')?.addEventListener('click', async () => { await kvSet('copiaPospuesta', addDays(hoy, 2)); refrescar(); });
 
-  pintarConsejo(root.querySelector('#consejo'));
+  conectarAsistente(root.querySelector('#asistente'));
   comprobarLogros().catch(e => console.warn('Logros:', e));
 }
 
-async function pintarConsejo(caja, forzar = false) {
-  const hoy = hoyISO();
-  const guardado = await kvGet('consejoDia');
-  if (guardado?.fecha === hoy && !forzar) return mostrar(caja, guardado.texto);
-  if (!(await iaDisponible())) return;
-  caja.hidden = false;
-  caja.innerHTML = cargando('Tu coach está pensando el consejo del día…');
-  try {
-    const texto = await consejoDelDia();
-    await kvSet('consejoDia', { fecha: hoy, texto });
-    mostrar(caja, texto);
-  } catch (e) {
-    caja.innerHTML = `<div class="mini">💬 No se pudo cargar el consejo del día: ${esc(e.message)}</div>
-      <button class="btn gris chico" style="margin-top:8px">Reintentar</button>`;
-    caja.querySelector('button').addEventListener('click', () => pintarConsejo(caja, true));
-  }
-}
-
-function mostrar(caja, texto) {
-  if (!caja.isConnected) return;
-  caja.hidden = false;
-  caja.innerHTML = `<div class="fila sep"><b>💬 Consejo del día</b><button class="btn-icon" aria-label="Otro consejo">↻</button></div>
-    <div style="margin-top:6px">${miniMarkdown(texto)}</div>
-    <div class="acciones"><a class="btn sec chico" href="#coach">Hablar con el coach</a></div>`;
-  caja.querySelector('.btn-icon').addEventListener('click', () => pintarConsejo(caja, true));
+// Caja para escribir al asistente sin salir de «Hoy»: muestra su respuesta y, si cambia algo, refresca la pantalla.
+function conectarAsistente(caja) {
+  const form = caja.querySelector('#orden'), zona = caja.querySelector('#respuesta');
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const texto = form.texto.value.trim();
+    if (!texto) return;
+    form.texto.value = '';
+    const m = await responder(texto);
+    if (m.ops) { recordar(m); refrescar(); return; }
+    pintar(m);
+  });
+  const recordar = m => { try { sessionStorage.setItem('respuestaAsistente', JSON.stringify(m)); } catch { /* sin almacenamiento */ } };
+  const pintar = m => {
+    zona.innerHTML = `<div class="respuesta-asistente">${mensajeHTML(m)}</div>`;
+    zona.querySelector('.msg')?.classList.remove('msg', 'model');
+    conectarMensajes(zona, [m], nueva => { if (nueva.ops) { recordar(nueva); refrescar(); } else pintar(nueva); }, refrescar);
+  };
+  // Tras un cambio se repinta «Hoy» y se vuelve a enseñar la última respuesta (con su «Deshacer»).
+  let guardada = null;
+  try { guardada = JSON.parse(sessionStorage.getItem('respuestaAsistente') || 'null'); sessionStorage.removeItem('respuestaAsistente'); } catch { /* sin almacenamiento */ }
+  if (guardada) pintar(guardada);
 }
 
 function gestionarHabitos(habits) {

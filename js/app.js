@@ -6,7 +6,7 @@ import * as hoy from './views/hoy.js';
 import * as objetivos from './views/objetivos.js';
 import * as horario from './views/horario.js';
 import * as ahorro from './views/ahorro.js';
-import * as coach from './views/coach.js';
+import * as asistente from './views/asistente.js';
 import * as perfil from './views/perfil.js';
 import * as progreso from './views/progreso.js';
 import { mostrarBienvenida } from './views/bienvenida.js';
@@ -17,7 +17,8 @@ const RUTAS = {
   objetivos: { titulo: 'Objetivos', vista: objetivos },
   horario: { titulo: 'Horario', vista: horario },
   ahorro: { titulo: 'Ahorro', vista: ahorro },
-  coach: { titulo: 'Coach', vista: coach },
+  asistente: { titulo: 'Asistente', vista: asistente },
+  coach: { titulo: 'Asistente', vista: asistente }, // enlaces antiguos
   perfil: { titulo: 'Perfil', vista: perfil },
   progreso: { titulo: 'Progreso', vista: progreso },
 };

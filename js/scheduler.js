@@ -1,8 +1,7 @@
-// Generador de horario determinista y validación de horarios propuestos por la IA.
+// Generador de horario: reparte las horas de cada objetivo en los huecos libres.
 import { toMin, toHHMM, weekday, weekDates, nowMin, hoyISO, uid, fmtHoras } from './util.js';
 import { VENTANA_MOMENTO } from './datos.js';
 
-const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const duracion = b => toMin(b.fin) - toMin(b.inicio);
 export const ordenarBloques = arr => [...arr].sort((a, b) => (a.fecha + a.inicio).localeCompare(b.fecha + b.inicio));
 
@@ -23,7 +22,7 @@ export function franjasDia(fecha, disponibilidad) {
   return (semana[weekday(fecha)] || []).map(f => [toMin(f.inicio), toMin(f.fin)]).filter(([a, b]) => b > a);
 }
 
-function huecosDia(fecha, disponibilidad, ocupados, descanso) {
+export function huecosDia(fecha, disponibilidad, ocupados, descanso) {
   let libres = franjasDia(fecha, disponibilidad);
   if (fecha === hoyISO()) libres = recortar(libres, [0, Math.ceil((nowMin() + 10) / 15) * 15]);
   for (const b of ocupados) libres = recortar(libres, [toMin(b.inicio) - descanso, toMin(b.fin) + descanso]);
@@ -58,8 +57,18 @@ export function generarSemana({ fecha, goals, blocks, disponibilidad, prefs, set
   const activos = goals.filter(g => !g.archivado && Number(g.horasSemana) > 0)
     .sort((a, b) => (b.prioridad - a.prioridad) || (a.fechaLimite || '9999').localeCompare(b.fechaLimite || '9999'));
 
+  // Si la semana ya ha empezado, solo se reparte la parte que corresponde a los días que quedan
+  // (lo de días pasados no se recupera de golpe en los que faltan).
+  const fraccion = fechas.length / 7;
+  const desde = fechas[0] || hoyISO();
   const resto = {};
-  for (const g of activos) resto[g.id] = g.horasSemana * 60 - conservados.filter(b => b.goalId === g.id).reduce((a, b) => a + duracion(b), 0);
+  for (const g of activos) {
+    const yaPuesto = conservados.filter(b => b.goalId === g.id && b.fecha >= desde).reduce((a, b) => a + duracion(b), 0);
+    const sesion = g.sesionMin || prefs.sesionMin || 60;
+    // Redondeado a sesiones completas (al menos una), para no crear sesiones de 21 minutos.
+    const objetivo = fraccion < 1 ? Math.max(sesion, Math.round(g.horasSemana * 60 * fraccion / sesion) * sesion) : g.horasSemana * 60;
+    resto[g.id] = objetivo - yaPuesto;
+  }
 
   const dias = fechas.map(f => {
     const ocupados = conservados.filter(b => b.fecha === f);
@@ -71,8 +80,12 @@ export function generarSemana({ fecha, goals, blocks, disponibilidad, prefs, set
     };
   });
 
+  // Hora a la que se puso la primera sesión de cada objetivo: las demás intentan ir a la misma (crea rutina).
+  const habitual = {};
+
   function mejorHueco(g, L) {
     const win = VENTANA_MOMENTO[g.momento];
+    const h = habitual[g.id];
     let mejor = null;
     dias.forEach((d, idx) => {
       if (d.carga + L > maxDia) return;
@@ -81,10 +94,12 @@ export function generarSemana({ fecha, goals, blocks, disponibilidad, prefs, set
         // También al final del hueco, para no partirlo en trozos que luego no sirvan a otro objetivo.
         const inicios = [s, e - L];
         if (win) { const ws = Math.max(s, win[0]); if (ws + L <= e) inicios.push(ws); }
+        if (h != null && h >= s && h + L <= e) inicios.push(h);
         for (const ini of new Set(inicios)) {
           const enVentana = !win || (ini >= win[0] && ini + L <= win[1]);
           const enBorde = ini === s || ini + L === e;
-          const score = [d.porGoal[g.id] ? 1 : 0, enVentana ? 0 : 1, d.carga, idx, enBorde ? 0 : 1, ini];
+          const lejosDeSuHora = h != null && Math.abs(ini - h) > 30 ? 1 : 0;
+          const score = [d.porGoal[g.id] ? 1 : 0, enVentana ? 0 : 1, d.carga, lejosDeSuHora, idx, enBorde ? 0 : 1, ini];
           if (!mejor || menor(score, mejor.score)) mejor = { d, ini, score };
         }
       }
@@ -114,6 +129,7 @@ export function generarSemana({ fecha, goals, blocks, disponibilidad, prefs, set
       d.libres = recortar(d.libres, [ini - descanso, ini + L + descanso]);
       d.carga += L;
       d.porGoal[g.id] = 1;
+      habitual[g.id] ??= ini;
       resto[g.id] -= L;
       progreso = true;
     }
@@ -128,26 +144,4 @@ export function generarSemana({ fecha, goals, blocks, disponibilidad, prefs, set
 function menor(a, b) {
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i];
   return false;
-}
-
-/**
- * Valida bloques propuestos (p. ej. por la IA): formato, sin solapes entre sí ni con los fijos.
- * Los que salen de la disponibilidad se aceptan con aviso (la petición puede cambiarla).
- */
-export function validarBloques(propuestos, fijos, disponibilidad) {
-  const validos = [], avisos = [];
-  const ocupados = [...fijos];
-  for (const p of ordenarBloques(propuestos)) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(p.fecha || '') || !HHMM.test(p.inicio || '') || !HHMM.test(p.fin || '') || toMin(p.fin) <= toMin(p.inicio)) {
-      avisos.push(`Descartado «${p.titulo || 'bloque'}»: hora no válida.`);
-      continue;
-    }
-    const choque = ocupados.find(o => o.fecha === p.fecha && toMin(p.inicio) < toMin(o.fin) && toMin(o.inicio) < toMin(p.fin));
-    if (choque) { avisos.push(`Descartado «${p.titulo}» (${p.inicio}): se solapa con «${choque.titulo}».`); continue; }
-    const dentro = franjasDia(p.fecha, disponibilidad).some(([s, e]) => toMin(p.inicio) >= s && toMin(p.fin) <= e);
-    if (!dentro) avisos.push(`«${p.titulo}» (${p.inicio}–${p.fin}) queda fuera de tu disponibilidad habitual.`);
-    validos.push(p);
-    ocupados.push(p);
-  }
-  return { validos, avisos };
 }

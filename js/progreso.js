@@ -1,5 +1,5 @@
 // Cálculos de progreso: % del día cumplido, medias, rachas y resumen semanal (sin IA).
-import { addDays, toMin, weekDates, weekStart, weekday, sum } from './util.js';
+import { addDays, toMin, weekDates, weekStart, weekday, sum, fmtEur } from './util.js';
 
 const minutos = b => toMin(b.fin) - toMin(b.inicio);
 
@@ -88,6 +88,28 @@ export function resumenSemana(d, lunes) {
     gastado: +sum((d.expenses || []).filter(enSemana), e => e.importe).toFixed(2),
     ahorrado: +sum((d.contributions || []).filter(enSemana), c => c.importe).toFixed(2),
   };
+}
+
+/** Resumen y 3 ideas para la semana siguiente a partir de los números de resumenSemana() (sin IA). */
+export function ideasSemana(n) {
+  const l = [];
+  if (n.pct == null) l.push('Esta semana no había nada planificado.');
+  else l.push(`Esta semana has cumplido el ${n.pct} % de lo que tenías planificado${n.pct >= 80 ? '. ¡Muy bien! 🌟' : n.pct >= 50 ? '. Vas por buen camino. 💪' : '. Ha costado, pero cada paso cuenta. 🌱'}`);
+  const cumplidos = n.objetivos.filter(o => o.horasObjetivo && o.horasHechas >= o.horasObjetivo);
+  if (cumplidos.length) l.push(`Has llegado a tus horas en ${cumplidos.map(o => `«${o.titulo}»`).join(', ')}.`);
+  if (n.diasPerfectos) l.push(`Tuviste ${n.diasPerfectos} ${n.diasPerfectos === 1 ? 'día perfecto' : 'días perfectos'}.`);
+
+  const ideas = [];
+  const flojo = n.objetivos.filter(o => o.horasObjetivo && o.horasHechas < o.horasObjetivo / 2).sort((a, b) => a.horasHechas / a.horasObjetivo - b.horasHechas / b.horasObjetivo)[0];
+  const habito = n.habitos.filter(h => h.dias < 4).sort((a, b) => a.dias - b.dias)[0];
+  if (n.pct != null && n.pct < 50) ideas.push({ titulo: 'Hazlo más pequeño', detalle: 'Baja un poco las horas o usa sesiones de 15–30 minutos: es mejor poco cada día que mucho un día suelto.' });
+  if (flojo) ideas.push({ titulo: `Dale un hueco fijo a «${flojo.titulo}»`, detalle: `Hiciste ${flojo.horasHechas} de ${flojo.horasObjetivo} h. Ponlo siempre a la misma hora: cuando es rutina, cuesta mucho menos.` });
+  if (habito) ideas.push({ titulo: `Ata «${habito.titulo}» a algo que ya haces`, detalle: `Lo cumpliste ${habito.dias} de 7 días. Hazlo justo después de algo fijo (desayunar, llegar a casa…) para no depender de acordarte.` });
+  if (n.gastado > 0 && n.ahorrado <= 0) ideas.push({ titulo: 'Págate a ti primero', detalle: `Gastaste ${fmtEur(n.gastado)} y no apartaste nada. El día que cobres, aparta una cantidad fija antes de gastar.` });
+  if (!n.tareas) ideas.push({ titulo: 'Tacha una tarea', detalle: 'No completaste ninguna tarea de tus objetivos. Elige la más pequeña y hazla el primer día de la semana.' });
+  if (n.pct != null && n.pct >= 80) ideas.push({ titulo: 'Sube un poquito el reto', detalle: 'Vas muy bien: prueba a añadir 30 minutos más a tu objetivo principal.' });
+  ideas.push({ titulo: 'Prepara la semana en 5 minutos', detalle: 'Mira tu horario el domingo y mueve lo que no te cuadre antes de que empiece.' });
+  return { texto: l.join(' '), ideas: ideas.slice(0, 3) };
 }
 
 /**

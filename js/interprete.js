@@ -35,7 +35,7 @@ function aMinutos(m, i) {
 const RANGO = new RegExp(String.raw`(?:\b(de|desde|entre)\s+)?(?:las?\s+)?${H}\s*(a|hasta|y|-|–)\s*(?:las?\s+)?${H}`, 'g');
 const TRAS_RANGO_NO_HORA = /^\s*(veces|dias|horas|semanas|meses|euros|€|anos|km|kilos|minutos|min\b|personas|libros)/;
 
-function rangos(t) {
+export function rangos(t) {
   const out = [];
   for (const m of t.matchAll(RANGO)) {
     const [pre, sep] = [m[1], m[7]];
@@ -55,7 +55,7 @@ function rangos(t) {
   return out;
 }
 
-function horaSuelta(t, verbos) {
+export function horaSuelta(t, verbos) {
   const re = new RegExp(String.raw`\b(?:${verbos})\b[^.\d]{0,30}?(?:a las|sobre las|a eso de las|hacia las|a la|sobre la|las|la)\s+${H}`, 'g');
   return [...t.matchAll(re)].map(m => ({ min: aMinutos(m, 1), pos: m.index, sufijo: m[5] })).filter(x => x.min != null);
 }
@@ -101,6 +101,8 @@ function fechaLimite(seg, hoy) {
 // ---------- Catálogo de objetivos ----------
 const IDIOMAS = { ingles: 'inglés', frances: 'francés', aleman: 'alemán', italiano: 'italiano', portugues: 'portugués', chino: 'chino', japones: 'japonés', catalan: 'catalán', euskera: 'euskera', gallego: 'gallego' };
 const CATALOGO = [
+  { clave: 'empleo', re: /\b((buscar|encontrar|conseguir) (un )?(trabajo|empleo|curro)|curriculum|entrevistas? de trabajo|cambiar de trabajo)\b/, area: 'trabajo', horas: 5, sesion: 60,
+    titulo: s => (/cambiar de trabajo/.test(s) ? 'Cambiar de trabajo' : 'Encontrar trabajo'), tareas: ['Actualizar el currículum', 'Apuntarme a 3 portales de empleo', 'Enviar 5 candidaturas esta semana'] },
   { clave: 'idioma', re: /\b(ingles|frances|aleman|italiano|portugues|chino|japones|catalan|euskera|gallego|idiomas?)\b/, area: 'estudio', horas: 3, sesion: 45,
     titulo: s => { const id = s.match(/\b(ingles|frances|aleman|italiano|portugues|chino|japones|catalan|euskera|gallego)\b/)?.[1]; const nombre = IDIOMAS[id] || 'idiomas'; const nivel = s.match(/\b([abc][12])\b/)?.[1]; return nivel ? `Sacarme el ${nivel.toUpperCase()} de ${nombre}` : /mejorar/.test(s) ? `Mejorar mi ${nombre}` : `Aprender ${nombre}`; },
     tareas: ['Hacer un test de nivel gratuito online', 'Elegir una app o curso (Duolingo, YouTube, podcasts…)', 'Practicar 15 minutos el primer día'] },
@@ -135,7 +137,7 @@ const CATALOGO = [
     titulo: s => (/dibuj/.test(s) ? 'Dibujar más' : /pint/.test(s) ? 'Pintar' : /fotograf/.test(s) ? 'Aprender fotografía' : 'Escribir'), tareas: ['Preparar el material', 'Hacer la primera sesión sin buscar la perfección'] },
 ];
 // En una frase concreta («aprender a programar en informática») gana el más específico, que va antes en la lista.
-const ORDEN_ESPECIFICO = ['programacion', 'ofimatica', 'redes', 'idioma', 'informatica', 'gimnasio', 'correr', 'leer', 'oposiciones', 'carnet', 'musica', 'cocina', 'proyecto', 'arte'];
+const ORDEN_ESPECIFICO = ['empleo', 'programacion', 'ofimatica', 'redes', 'idioma', 'informatica', 'gimnasio', 'correr', 'leer', 'oposiciones', 'carnet', 'musica', 'cocina', 'proyecto', 'arte'];
 
 const DESEO = /\b(quiero|quisiera|me gustaria|me encantaria|mi (?:objetivo|meta|proposito|reto|suen)\w* (?:es|seria|son)|mis objetivos son|necesito|me propongo|pretendo|intentar|ojala|deseo|aspiro a|tengo pensado|voy a empezar a|me apetece)\b/g;
 const SUAVE = /poco a poco|sin agobi|sin rallar|no rallarme|no agobiarme|tranquil|sin presion|despacio|sin prisa|paso a paso|no saturarme|no quemarme|sin estres|a mi ritmo/;
@@ -177,7 +179,7 @@ export function interpretarTexto(textoOriginal, { hoy, ajustes = [] } = {}) {
   // --- Trabajo, turnos y compromisos fijos (cada rango de horas, según lo que tiene justo antes) ---
   const rs = rangos(t);
   const compromisos = [];
-  let finAnterior = 0;
+  let finAnterior = 0, anterior = null;
   for (const r of rs) {
     const finAnterior0 = finAnterior;
     const antes = t.slice(Math.max(finAnterior, r.pos - 90), r.pos);
@@ -185,16 +187,33 @@ export function interpretarTexto(textoOriginal, { hoy, ajustes = [] } = {}) {
     finAnterior = r.finPos;
     const turnosAntes = [...antes.matchAll(TURNO_RE)].filter(m => !/\b(empiezo|manana empiezo|pasado)\s*$/.test(antes.slice(0, m.index)));
     const turno = turnosAntes.length ? turnosAntes.at(-1)[1] : null;
-    const actividad = antes.match(/\b(clase|clases|instituto|universidad|facultad|academia|curso|guitarra|piano|futbol|baloncesto|gimnasio|natacion|ingles|catequesis|voluntariado|entreno|entrenamiento|cuido|recoger)\b[^,.]*$/);
+    const actividad = antes.match(/\b(clase|clases|instituto|universidad|facultad|cole|colegio|academia|curso|guitarra|piano|futbol|baloncesto|gimnasio|natacion|ingles|catequesis|voluntariado|entreno|entrenamiento|cuido|recoger)\b[^,.]*$/);
     const libre = /\b(libre|tiempo para mi|tengo tiempo|disponible)\b[^,.]*$/.test(antes);
     const esTrabajo = TRABAJO_RE.test(antes) || (turno && /turno|rotativ/.test(t)) || /trabaj/.test(despues);
-    const dias = diasEn(antes.slice(-60) + ' ' + despues);
+    const diasAntes = diasEn(antes.slice(-60));
+    const dias = diasAntes.size ? diasAntes : diasEn(despues.split(/[.;,]/)[0]);
+    const n = compromisos.length;
     if (libre) compromisos.push({ tipo: 'libre', ini: r.ini, fin: r.fin, dias });
     else if (actividad && !(turno && esTrabajo)) {
-      const desde = Math.max(finAnterior0, r.pos - 90) + actividad.index;
-      const titulo = original.slice(desde, desde + actividad[0].length).replace(/\s+(de|a las|desde|entre)\s*$/i, '').trim();
-      compromisos.push({ tipo: 'actividad', titulo: mayuscula(titulo), ini: r.ini, fin: r.fin, dias });
-    } else if (esTrabajo || turno) compromisos.push({ tipo: 'trabajo', turno: turno && /turno|rotativ|semana/.test(t) ? turno : null, ini: r.ini, fin: r.fin, dias });
+      // Las clases largas (instituto, universidad…) marcan el día igual que un trabajo.
+      if (/^(clases?|instituto|universidad|facultad|cole|colegio)$/.test(actividad[1]) && r.fin - r.ini >= 180) compromisos.push({ tipo: 'trabajo', que: 'clase', turno: null, ini: r.ini, fin: r.fin, dias });
+      else {
+        const desde = Math.max(finAnterior0, r.pos - 90) + actividad.index;
+        const titulo = original.slice(desde, desde + actividad[0].length).replace(/\s+(de|a las|desde|entre)\s*$/i, '').trim();
+        compromisos.push({ tipo: 'actividad', titulo: mayuscula(titulo), ini: r.ini, fin: r.fin, dias });
+      }
+    } else if (esTrabajo || turno) compromisos.push({ tipo: 'trabajo', que: 'trabajo', turno: turno && /turno|rotativ|semana/.test(t) ? turno : null, ini: r.ini, fin: r.fin, dias });
+    else if (anterior?.tipo === 'trabajo' && antes.trim().length < 45) compromisos.push({ ...anterior, ini: r.ini, fin: r.fin, dias: dias.size ? dias : anterior.dias });
+    if (compromisos.length > n) anterior = compromisos.at(-1);
+  }
+
+  // Llevar y recoger a los niños: «los llevo al cole a las 9 y los recojo a las 16:30».
+  for (const m of t.matchAll(new RegExp(String.raw`\b(llevo|dejo|recojo|recoger|llevar|dejar)\b[^.]{0,40}?\b(?:a las|sobre las|a la)\s+${H}`, 'g'))) {
+    const zona = t.slice(Math.max(0, m.index - 60), m.index + m[0].length + 20);
+    const min = aMinutos(m, 2);
+    if (min == null || !/\b(cole|colegio|guarderia|ninos|nino|nina|ninas|hijos?|hijas?|peques|instituto)\b/.test(zona)) continue;
+    const dias = diasEn(zona);
+    compromisos.push({ tipo: 'actividad', titulo: /recog|recoj/.test(m[1]) ? 'Recoger a los niños' : 'Llevar a los niños', ini: min - 20, fin: min + 25, dias: dias.size ? dias : new Set([0, 1, 2, 3, 4]) });
   }
 
   // Días de trabajo: «trabajo de viernes a martes», «libro los miércoles y jueves».
@@ -208,9 +227,9 @@ export function interpretarTexto(textoOriginal, { hoy, ajustes = [] } = {}) {
   }
   const trabajos = compromisos.filter(c => c.tipo === 'trabajo');
   if (trabajos.length && !diasTrabajo) {
-    const conDias = trabajos.find(c => c.dias.size);
-    diasTrabajo = conDias ? conDias.dias : new Set([0, 1, 2, 3, 4]);
-    if (!conDias) supuestos.push('Que trabajas de lunes a viernes.');
+    const union = new Set(trabajos.flatMap(c => [...c.dias]));
+    diasTrabajo = union.size ? union : new Set([0, 1, 2, 3, 4]);
+    if (!union.size) supuestos.push(`Que ${trabajos.every(c => c.que === 'clase') ? 'tienes clase' : 'trabajas'} de lunes a viernes.`);
   }
   for (const c of trabajos) if (!c.dias.size) c.dias = diasTrabajo;
 
@@ -263,22 +282,26 @@ export function interpretarTexto(textoOriginal, { hoy, ajustes = [] } = {}) {
     }
     const idx = patron.indexOf(tipoActual) + Math.min(posEnBloque, semanas[tipoActual] - 1);
     const referencia = addDays(inicioDe(fechaRef), -7 * idx);
-    turnos = { rotativo: true, inicioCiclo, patron, referencia, horarios: Object.fromEntries(Object.entries(horarios).map(([k, v]) => [k, { inicio: toHHMM(v.ini % 1440), fin: toHHMM(v.fin % 1440) }])) };
+    turnos = { rotativo: true, inicioCiclo, patron, referencia, diasTrabajo: [...(diasTrabajo || [])].sort(), horarios: Object.fromEntries(Object.entries(horarios).map(([k, v]) => [k, { inicio: toHHMM(v.ini % 1440), fin: toHHMM(v.fin % 1440) }])) };
     entendido.push(`Trabajas a turnos rotativos: ${tipos.map(tp => `${semanas[tp]} ${semanas[tp] === 1 ? 'semana' : 'semanas'} de ${TURNO_TXT[tp]} (${toHHMM(horarios[tp].ini % 1440)}–${toHHMM(horarios[tp].fin % 1440)})`).join(', ')}.`);
   }
-  if (diasTrabajo && trabajos.length) entendido.push(`Trabajas ${describirDias(diasTrabajo)}${!rotativo && trabajos[0] ? `, de ${toHHMM(trabajos[0].ini % 1440)} a ${toHHMM(trabajos[0].fin % 1440)}` : ''}.`);
+  if (rotativo && diasTrabajo) entendido.push(`Trabajas ${describirDias(diasTrabajo)}.`);
+  else if (trabajos.length) entendido.push(`${describirHorarios(trabajos)}.`);
+  for (const c of compromisos.filter(x => x.tipo === 'actividad')) entendido.push(`${c.titulo}: ${c.dias.size ? `${describirDias(c.dias)}, ` : ''}${c.fin - c.ini <= 50 ? `sobre las ${toHHMM(c.ini + 20)}` : `de ${toHHMM(c.ini)} a ${toHHMM(c.fin % 1440)}`}.`);
 
   // --- Trayecto, sueño y descanso ---
   let trayecto = null, m2;
   if ((m2 = t.match(new RegExp(String.raw`(?:tardo|tengo|son|hay|echo)\s+(?:unos?\s+|unas?\s+)?(${NUMS}|\d+)\s*(minutos|min|horas?|h)\b[^.]{0,25}?(?:en llegar|de camino|de trayecto|en ir|hasta el trabajo|al trabajo|en coche|en bus|en tren|de ida)`)))) trayecto = Math.round(numero(m2[1]) * (/^h/.test(m2[2]) ? 60 : 1));
   else if ((m2 = t.match(/(media hora|una hora|hora y media|un cuarto de hora)\s+(?:en llegar|de camino|de trayecto|en ir|hasta el trabajo|al trabajo)/))) trayecto = { 'media hora': 30, 'una hora': 60, 'hora y media': 90, 'un cuarto de hora': 15 }[m2[1]];
   else if (/(vivo|trabajo) (al lado|cerca|muy cerca)|teletrabaj|desde casa/.test(t)) trayecto = 10;
-  if (trayecto == null && trabajos.length) { trayecto = 30; supuestos.push('Que tardas unos 30 minutos en llegar al trabajo.'); }
+  if (trayecto == null && trabajos.length) { trayecto = 30; supuestos.push(`Que tardas unos 30 minutos en llegar ${trabajos.every(c => c.que === 'clase') ? 'a clase' : 'al trabajo'}.`); }
   else if (trayecto != null && trabajos.length) entendido.push(`Tardas unos ${trayecto} minutos en llegar.`);
   trayecto = trayecto || 0;
 
-  const levantar = horaSuelta(t, 'me levanto|me despierto|despertarme|levantarme');
-  const acostar = horaSuelta(t, 'me acuesto|me voy a (?:la cama|dormir)|duermo|me duermo|acostarme').map(x => {
+  const hasta = x => /\bhasta\b/.test(t.slice(x.pos, x.pos + 45));
+  const acostarBruto = horaSuelta(t, 'me acuesto|me voy a (?:la cama|dormir)|duermo|me duermo|acostarme');
+  const levantar = [...horaSuelta(t, 'me levanto|me despierto|despertarme|levantarme'), ...acostarBruto.filter(hasta)].sort((a, b) => a.pos - b.pos);
+  const acostar = acostarBruto.filter(x => !hasta(x)).map(x => {
     let min = x.min;
     if (!x.sufijo && min >= 540 && min < 780) min += 720; // «a las 11» por la noche → 23:00; «a las 12» → 24:00
     else if (!x.sufijo && min < 360) min += 1440;          // «a la 1» → 01:00 del día siguiente
@@ -337,7 +360,7 @@ export function interpretarTexto(textoOriginal, { hoy, ajustes = [] } = {}) {
         }
       } else {
         // Objetivo que no está en el catálogo: «aprender a cocinar paella», «sacarme el título de…».
-        const verbo = seg.match(/\b(aprender|mejorar|empezar a|practicar|sacarme|sacar|hacer|terminar|acabar|montar|crear|ser mas|conseguir|preparar)\b/);
+        const verbo = seg.match(/\b(aprender|mejorar|empezar a|practicar|sacarme|sacar|hacer|terminar|acabar|montar|crear|ser mas|conseguir|preparar|buscar|dejar de)\b/);
         if (verbo && !/\b(ahorr|dinero|euros|€|movil|dormir|agua|medit)/.test(seg) && !quitar) {
           const desde = a + seg.indexOf(verbo[1]);
           const palabras = original.slice(desde, b).replace(/\s+(pero|porque|para que|para no|aunque|de una forma|de forma)\b.*$/i, '').trim().split(/\s+/).slice(0, 7).join(' ');
@@ -367,15 +390,17 @@ export function interpretarTexto(textoOriginal, { hoy, ajustes = [] } = {}) {
   if (objetivos.length) entendido.push(`Quieres: ${objetivos.map(o => `«${o.titulo}»`).join(', ')}${suaveGlobal ? ', poco a poco y sin agobiarte' : ''}.`);
 
   // --- Horas libres de cada día (por turno si rota) ---
-  const plantilla = tipo => [0, 1, 2, 3, 4, 5, 6].map(d => franjasLibres({ d, tipo, compromisos, trabajos, diasTrabajo, turnos, trayecto, sueño, diasDescanso }));
+  const sinTrabajo = !trabajos.length && /\b(no trabajo|en paro|desemplead\w*|sin trabajo|parad[oa]|busco trabajo|buscando (trabajo|empleo)|no estudio ni trabajo)\b/.test(t);
+  if (sinTrabajo) entendido.push('Ahora mismo no trabajas: tienes bastante tiempo libre cada día.');
+  const plantilla = tipo => [0, 1, 2, 3, 4, 5, 6].map(d => franjasLibres({ d, tipo, compromisos, trabajos, diasTrabajo, turnos, trayecto, sueño, diasDescanso, sinTrabajo }));
   let disponibilidadPorTurno = null, disponibilidad;
   if (turnos) {
     disponibilidadPorTurno = Object.fromEntries(Object.keys(turnos.horarios).map(tp => [tp, plantilla(tp)]));
     disponibilidad = disponibilidadPorTurno[turnos.patron[posicionEnPatron(turnos, hoy)]];
     turnos.disponibilidad = disponibilidadPorTurno;
   } else disponibilidad = plantilla(null);
-  if (!trabajos.length && !compromisos.length) supuestos.push('No me has contado tu horario de trabajo o clases: he usado un horario general (tardes y fines de semana). Si trabajas o estudias, dime de qué hora a qué hora y qué días.');
-  if (!levantar.length && trabajos.length) supuestos.push('A qué hora te levantas y te acuestas: lo he calculado según tu horario de trabajo.');
+  if (!trabajos.length && !compromisos.length && !sinTrabajo) supuestos.push('No me has contado tu horario de trabajo o clases: he usado un horario general (tardes y fines de semana). Si trabajas o estudias, dime de qué hora a qué hora y qué días.');
+  if (!levantar.length && trabajos.length) supuestos.push('A qué hora te levantas y te acuestas: lo he calculado según tu horario.');
 
   // Ajusta las horas de los objetivos a lo que cabe (como mucho, el 60 % del tiempo libre de la semana más corta).
   const libresSemana = Math.min(...(disponibilidadPorTurno ? Object.values(disponibilidadPorTurno) : [disponibilidad]).map(minutosSemana));
@@ -432,9 +457,23 @@ export function interpretarTexto(textoOriginal, { hoy, ajustes = [] } = {}) {
   return { raw, turnos, supuestos, entendido };
 }
 
+const PASOS_GENERALES = ['Escribir qué significa para ti haberlo conseguido (algo que puedas medir)', 'Dividirlo en 3 pasos pequeños',
+  'Hacer el primer paso hoy, en menos de 15 minutos', 'Reservar un hueco fijo en tu horario para avanzar'];
+
+/** Primeros pasos para un objetivo (según su tipo), sin repetir las tareas que ya tiene. */
+export function primerosPasos(titulo, yaTiene = []) {
+  const cat = catalogoDe(normalizar(titulo))[0];
+  const tiene = new Set(yaTiene.map(normalizar));
+  const pasos = [...(cat?.tareas || []), ...PASOS_GENERALES].filter(p => !tiene.has(normalizar(p))).slice(0, 5);
+  return {
+    consejo: 'Empieza por algo tan pequeño que no puedas decir que no: 10–15 minutos hoy. La constancia gana a la intensidad, y cada vez que lo haces se vuelve más fácil.',
+    pasos: pasos.map(p => ({ titulo: p, detalle: '' })),
+  };
+}
+
 // Objetivos del catálogo que nombra un trozo de texto, del más específico al más general.
 // «programar» ya es informática y «leer en inglés» es inglés: se quita el que sobra.
-function catalogoDe(seg) {
+export function catalogoDe(seg) {
   let l = CATALOGO.filter(c => c.re.test(seg)).sort((x, y) => ORDEN_ESPECIFICO.indexOf(x.clave) - ORDEN_ESPECIFICO.indexOf(y.clave));
   if (l.some(c => ['programacion', 'ofimatica', 'redes'].includes(c.clave))) l = l.filter(c => c.clave !== 'informatica');
   if (l.length > 1 && /\bleer\b[^,.]{0,20}\b(ingles|frances|aleman|informatic|program)/.test(seg)) l = l.filter(c => c.clave !== 'leer');
@@ -458,17 +497,21 @@ function aplicarModificadores(o, seg, hoy) {
 }
 
 // Franjas libres de un día de la semana (d: 0 lunes … 6 domingo) para un turno concreto (o sin turnos).
-function franjasLibres({ d, tipo, compromisos, trabajos, diasTrabajo, turnos, trayecto, sueño, diasDescanso }) {
+function franjasLibres({ d, tipo, compromisos, trabajos, diasTrabajo, turnos, trayecto, sueño, diasDescanso, sinTrabajo }) {
   if (diasDescanso.has(d)) return [];
   const trabajosHoy = trabajos.filter(c => (turnos ? (c.turno ? c.turno === tipo : true) : true) && c.dias.has(d) && !(turnos && !c.turno && trabajos.some(x => x.turno)));
   const sinCompromisos = !trabajos.length && !compromisos.length;
-  // Sin datos de horario: tardes entre semana y algo más el fin de semana.
+  // Sin trabajo: mañanas y tardes. Sin datos de horario: tardes entre semana y algo más el fin de semana.
+  if (sinTrabajo && sinCompromisos) return [{ inicio: '10:00', fin: '13:30' }, { inicio: '16:00', fin: '20:00' }];
   if (sinCompromisos) return d < 5 ? [{ inicio: '18:00', fin: '21:00' }] : [{ inicio: '10:00', fin: '13:30' }, { inicio: '17:00', fin: '20:30' }];
 
   const s = { ...sueño.general, ...(tipo && sueño[tipo]) };
   const primero = trabajosHoy.length ? Math.min(...trabajosHoy.map(c => c.ini)) : null;
   const ultimo = trabajosHoy.length ? Math.max(...trabajosHoy.map(c => c.fin)) : null;
-  let levantar = s.levantar ?? (primero != null && primero < 600 ? Math.floor((primero - trayecto - 50) / 5) * 5 : primero != null && primero < 840 ? 450 : 540);
+  let levantar = s.levantar ?? (primero != null && primero < 600 ? Math.floor((primero - trayecto - 50) / 5) * 5 : primero != null && primero < 840 ? 450 : primero != null && primero >= 1200 ? 840 : 540);
+  // Si ayer hubo turno de noche, hoy se duerme hasta unas 7 h y media después de salir.
+  const nocheAyer = trabajos.filter(c => c.fin > 1440 && c.dias.has((d + 6) % 7) && (!turnos || !c.turno || c.turno === tipo));
+  if (nocheAyer.length) levantar = Math.max(levantar, Math.max(...nocheAyer.map(c => c.fin - 1440)) + trayecto + 450);
   let acostar = s.acostar ?? (ultimo != null && ultimo > 1260 ? Math.min(ultimo + trayecto + 90, 1500) : primero != null && primero < 480 ? 1350 : 1410);
   // Para el turno de mañana, levantarse antes de lo dicho «en general» no tiene sentido si entra antes.
   if (primero != null && levantar > primero - trayecto - 20) levantar = Math.max(0, primero - trayecto - 50);
@@ -535,10 +578,25 @@ function describirDias(set) {
   return `los ${l.map(x => NOM[x]).join(', ').replace(/, ([^,]*)$/, ' y $1')}`;
 }
 
+// «Trabajas de lunes a sábado de 10:00 a 14:00 y de 17:00 a 21:00», «Tienes clase…», con varios horarios por días.
+function describirHorarios(trabajos, persona = 'segunda') {
+  const grupos = new Map();
+  for (const c of trabajos) {
+    const k = `${c.que || 'trabajo'}|${[...c.dias].sort().join()}`;
+    if (!grupos.has(k)) grupos.set(k, { que: c.que || 'trabajo', dias: c.dias, rangos: [] });
+    grupos.get(k).rangos.push(`de ${toHHMM(c.ini % 1440)} a ${toHHMM(c.fin % 1440)}`);
+  }
+  const partes = [...grupos.values()].map(g => `${describirDias(g.dias)} ${g.rangos.join(' y ')}`);
+  const lista = partes.length > 1 ? `${partes.slice(0, -1).join(', ')} y ${partes.at(-1)}` : partes[0];
+  const clase = [...grupos.values()].every(g => g.que === 'clase');
+  const verbo = persona === 'segunda' ? (clase ? 'Tienes clase' : 'Trabajas') : (clase ? 'Tiene clase' : 'Trabaja');
+  return `${verbo} ${lista}`;
+}
+
 function describirRutina({ turnos, trabajos, diasTrabajo, trayecto, sueño }) {
   const p = [];
   if (turnos) p.push(`Trabaja a turnos rotativos (${Object.entries(turnos.horarios).map(([k, v]) => `${TURNO_TXT[k]} ${v.inicio}–${v.fin}`).join(', ')}), ${describirDias(diasTrabajo || new Set())}.`);
-  else if (trabajos.length) p.push(`Trabaja ${describirDias(diasTrabajo || new Set())} de ${toHHMM(trabajos[0].ini % 1440)} a ${toHHMM(trabajos[0].fin % 1440)}.`);
+  else if (trabajos.length) p.push(`${describirHorarios(trabajos, 'tercera')}.`);
   if (trabajos.length && trayecto) p.push(`Tarda unos ${trayecto} min en llegar.`);
   if (sueño.general?.levantar != null) p.push(`Se levanta sobre las ${toHHMM(sueño.general.levantar)}.`);
   if (sueño.general?.acostar != null) p.push(`Se acuesta sobre las ${toHHMM(sueño.general.acostar % 1440)}.`);

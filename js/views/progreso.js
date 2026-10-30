@@ -64,7 +64,7 @@ export async function render(root) {
     <div class="seccion"><h2>Revisiones semanales</h2><button class="btn sec chico" id="revision">Esta semana</button></div>
     ${revisiones.length ? `<div class="card plano"><ul class="lista">${[...revisiones].reverse().map(r => `
       <li class="toque" data-semana="${r.semana}"><div class="grow"><div class="t">Semana del ${esc(fmtFecha(r.semana, { day: 'numeric', month: 'long' }))}</div>
-        <div class="mini">${r.numeros.pct ?? '–'}${r.numeros.pct != null ? ' %' : ''} cumplido · ${r.numeros.bloques.hechos}/${r.numeros.bloques.total} bloques${r.texto ? ' · 💬' : ''}</div></div><span class="mini">›</span></li>`).join('')}</ul></div>`
+        <div class="mini">${r.numeros.pct ?? '–'}${r.numeros.pct != null ? ' %' : ''} cumplido · ${r.numeros.bloques.hechos}/${r.numeros.bloques.total} bloques</div></div><span class="mini">›</span></li>`).join('')}</ul></div>`
       : '<div class="card vacio">Cada domingo tendrás aquí el resumen de tu semana.</div>'}`;
 
   root.querySelectorAll('[data-rango]').forEach(b => b.addEventListener('click', () => { estado.rango = Number(b.dataset.rango); refrescar(); }));

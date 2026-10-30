@@ -2,10 +2,9 @@
 import { db, kvSet } from '../db.js';
 import { CATEGORIAS, catNombre, catIcono, getIngresos, saveIngresos, PRIORIDADES } from '../datos.js';
 import { esc, sheet, formData, toast, refrescar, uid, hoyISO, fmtEur, fmtFecha, opciones, sum } from '../util.js';
-import { datosFinanzas, cargando } from './comun.js';
-import { resumenMes, regla503020, estadoMeta, recomendaciones, evaluarReto, resumenParaIA } from '../finanzas.js';
+import { datosFinanzas } from './comun.js';
+import { resumenMes, regla503020, estadoMeta, recomendaciones, evaluarReto } from '../finanzas.js';
 import { cerditoHTML, animarAportacion, etapa, ETAPAS } from '../cerdito.js';
-import { analizarFinanzas, ErrorIA } from '../coach.js';
 
 const ESTADO_META = {
   'completada': ['verde', '🏆 Conseguida'], 'adelantado': ['verde', '🚀 Adelantado'], 'al-dia': ['', '✅ Al día'],
@@ -53,8 +52,6 @@ export async function render(root) {
     </div>
 
     <div class="seccion"><h2>Cómo ahorrar más</h2></div>
-    <button class="btn sec ancho" id="analizar" style="margin-bottom:12px">🤖 Analiza mis finanzas</button>
-    <div id="analisis"></div>
     ${reto ? retoHTML(reto) : ''}
     ${recs.length ? recs.map((x, i) => `<div class="card rec"><span class="ico">${x.icono}</span><div style="flex:1;min-width:0">
       <div class="t">${esc(x.titulo)}</div><p>${esc(x.texto)}</p>
@@ -100,7 +97,6 @@ export async function render(root) {
   root.querySelectorAll('[data-meta]').forEach(el => el.addEventListener('click', () => detalleMeta(el.dataset.meta)));
   root.querySelectorAll('[data-gasto]').forEach(el => el.addEventListener('click', () => apuntarGasto(d.expenses.find(e => e.id === el.dataset.gasto))));
   root.querySelectorAll('[data-rec]').forEach(b => b.addEventListener('click', () => ejecutarAccion(recs[b.dataset.rec].accion, d)));
-  root.querySelector('#analizar').addEventListener('click', () => analizar(root.querySelector('#analisis'), d));
   conectarReto(root, reto, metas);
 }
 
@@ -151,29 +147,6 @@ function conectarReto(root, reto, metas) {
       detalleMeta(activa.id, reto.ahorroEstimado);
     }
   }));
-}
-
-async function analizar(zona, d) {
-  zona.innerHTML = cargando('Analizando tus finanzas…');
-  try {
-    const r = await analizarFinanzas(resumenParaIA(d));
-    zona.innerHTML = `<div class="card"><b>🤖 Análisis de tu coach</b><p style="margin-top:6px">${esc(r.diagnostico)}</p>
-      ${r.acciones.map((a, i) => `<div class="rec" style="margin-top:12px"><span class="ico">💡</span><div style="flex:1">
-        <div class="t">${esc(a.titulo)} ${a.ahorroMensual ? `<span class="badge verde">+${fmtEur(a.ahorroMensual, true)}/mes</span>` : ''}</div>
-        <p>${esc(a.detalle)}</p><button class="btn sec chico" style="margin-top:6px" data-tarea="${i}">+ Convertir en tarea</button></div></div>`).join('')}</div>`;
-    zona.querySelectorAll('[data-tarea]').forEach(b => b.addEventListener('click', async () => {
-      const a = r.acciones[b.dataset.tarea];
-      let goal = (await db.all('goals')).find(g => g.area === 'finanzas' && !g.archivado);
-      if (!goal) {
-        goal = { id: uid(), titulo: 'Ahorrar más', porque: 'Tener tranquilidad y cumplir mis metas de ahorro', area: 'finanzas', prioridad: 2, horasSemana: 0, momento: 'cualquiera', creado: hoyISO(), archivado: false };
-        await db.put('goals', goal);
-      }
-      await db.put('tasks', { id: uid(), goalId: goal.id, titulo: a.titulo, hecho: false, creado: Date.now() });
-      b.disabled = true; b.textContent = `✓ Añadida a «${goal.titulo}»`;
-    }));
-  } catch (e) {
-    zona.innerHTML = `<div class="aviso">${esc(e instanceof ErrorIA ? e.message : 'No se pudo hacer el análisis. Inténtalo de nuevo.')}</div>`;
-  }
 }
 
 // ---------- Gastos ----------

@@ -25,7 +25,7 @@
       await kvSet('bienvenidaHecha', true);
       await kvSet('ultimaCopia', addDays(hoy, -10));
       await kvSet('profile', { nombre: 'Demo', sobreMi: 'Persona de ejemplo para probar la app.', rutina: 'Trabajo de 9 a 17 h.', fortalezas: 'Constancia', debilidades: 'El móvil', motivacion: 'Sentirme mejor', tono: 'Cercano y directo' });
-      await kvSet('settings', { apiKey: '', modelo: 'gemini-flash-latest', tema: 'auto', importantes: 'alta', nombreAtajo: 'MMV Horario' });
+      await kvSet('settings', { tema: 'auto', importantes: 'alta', nombreAtajo: 'MMV Horario' });
       await kvSet('prefs', { sesionMin: 60, descansoMin: 10, maxHorasDia: 3 });
       await kvSet('disponibilidad', Array.from({ length: 7 }, (_, i) => i < 5 ? [{ inicio: '07:00', fin: '08:30' }, { inicio: '17:30', fin: '22:30' }] : [{ inicio: '09:00', fin: '13:00' }, { inicio: '17:00', fin: '21:00' }]));
 
@@ -106,11 +106,6 @@
         { id: uid(), goalId: 's2', importe: 1700, fecha: addDays(hoy, -40) },
         { id: uid(), goalId: 's3', importe: 500, fecha: addDays(hoy, -30) },
         { id: uid(), goalId: 's4', importe: 90, fecha: addDays(hoy, -2) },
-      ]);
-      await db.putMany('chat', [
-        { id: 'm1', rol: 'user', texto: 'No sé por dónde empezar hoy. ¿Qué hago primero?', ts: 1 },
-        { id: 'm2', rol: 'model', texto: 'Empieza por lo que más te acerca a tu meta: **inglés**.\n\n1. Pon un temporizador de 25 min\n2. Haz una lección del curso\n3. Apunta 5 palabras nuevas\n\n¿Te añado un bloque ahora?', ts: 2,
-          acciones: [{ id: 'a1', name: 'crear_bloque', args: { fecha: hoy, inicio: '19:00', fin: '19:30', titulo: 'Inglés: lección 1' }, estado: 'pendiente' }] },
       ]);
       document.getElementById('estado').textContent = '✅ Datos de ejemplo cargados. Abre la app.';
       document.title = 'DEMO OK';

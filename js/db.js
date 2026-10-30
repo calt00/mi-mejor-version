@@ -55,20 +55,17 @@ export const kvSet = (key, value) => db.put('kv', { id: key, value });
 export async function exportAll() {
   const out = { app: 'mi-mejor-version', version: DB_VERSION, exportado: new Date().toISOString(), datos: {} };
   for (const s of STORES) out.datos[s] = await db.all(s);
-  // La API key no sale del dispositivo en las copias.
-  out.datos.kv = out.datos.kv.map(r => r.id === 'settings' ? { ...r, value: { ...r.value, apiKey: '' } } : r);
+  // Si quedaba guardada una clave antigua de Gemini, no sale en las copias.
+  out.datos.kv = out.datos.kv.map(r => r.id === 'settings' ? { ...r, value: { ...r.value, apiKey: undefined } } : r);
   return out;
 }
 
 export async function importAll(json) {
   if (json?.app !== 'mi-mejor-version' || !json.datos) throw new Error('El archivo no es una copia de Mi Mejor Versión.');
-  const apiKey = (await kvGet('settings', {}))?.apiKey || '';
   for (const s of STORES) {
     await db.clear(s);
     if (Array.isArray(json.datos[s])) await db.putMany(s, json.datos[s]);
   }
-  const settings = await kvGet('settings', {});
-  if (!settings.apiKey && apiKey) await kvSet('settings', { ...settings, apiKey });
 }
 
 export async function pedirPersistencia() {

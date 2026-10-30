@@ -220,26 +220,3 @@ export function recomendaciones(d) {
 }
 
 // Resumen agregado (sin notas personales) para que la IA analice tus finanzas.
-export function resumenParaIA(d) {
-  const mk = monthKey(d.hoy);
-  const r = resumenMes(d, mk);
-  const meses = [0, 1, 2, 3].map(n => prevMonthKey(mk, n));
-  const tendencia = {};
-  for (const m of meses) {
-    const pc = {};
-    for (const e of d.expenses.filter(e => monthKey(e.fecha) === m)) pc[catNombre(e.categoria)] = Math.round((pc[catNombre(e.categoria)] || 0) + e.importe);
-    tendencia[m] = pc;
-  }
-  return {
-    fecha: d.hoy,
-    ingresosMensuales: r.ingresos,
-    gastosFijos: d.fixed.map(f => ({ concepto: f.nombre, categoria: catNombre(f.categoria), importe: f.importe, suscripcion: esSuscripcion(f) })),
-    mesActual: { diaDelMes: r.dia, diasDelMes: r.dim, gastosVariables: Math.round(r.variables), aportadoAMetas: Math.round(r.aportado), disponible: Math.round(r.disponible) },
-    gastosVariablesPorMesYCategoria: tendencia,
-    regla503020: Object.fromEntries(Object.entries(regla503020(d, r).pct).map(([k, v]) => [k, Math.round(v) + ' %'])),
-    metasDeAhorro: d.savingsGoals.map(m => {
-      const e = estadoMeta(m, d.contributions, d.hoy);
-      return { nombre: m.nombre, meta: m.meta, ahorrado: Math.round(e.ahorrado), fechaLimite: m.fechaLimite || null, ritmoMensual: Math.round(e.ritmoMes), necesarioMensual: e.necesarioMes ? Math.round(e.necesarioMes) : null, estado: e.estado };
-    }),
-  };
-}

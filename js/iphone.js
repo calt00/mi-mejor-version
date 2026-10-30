@@ -4,20 +4,15 @@ import { getSettings, getIngresos } from './datos.js';
 import { hoyISO, addDays, isoLocal, nowMin, toMin, fmtEur, parseISODate, toISODate, daysInMonth } from './util.js';
 import { ordenarBloques } from './scheduler.js';
 import { frasesLocales } from './frases.js';
-import { iaDisponible, frasesParaBloques } from './coach.js';
 import { estadoMeta } from './finanzas.js';
 
 export const LISTA_RECORDATORIOS = 'Mi Mejor Versión';
 
-// Rellena la frase motivadora de los bloques que no la tienen (IA si hay, si no, locales).
+// Rellena la frase motivadora de los bloques que no la tienen.
 export async function asignarFrases(bloques) {
   const sinFrase = bloques.filter(b => !b.frase);
   if (!sinFrase.length) return bloques;
-  let frases = [];
-  if (await iaDisponible()) {
-    try { frases = (await frasesParaBloques(sinFrase)).filter(Boolean).slice(0, sinFrase.length); } catch { /* usamos las locales */ }
-  }
-  if (frases.length < sinFrase.length) frases = [...frases, ...await frasesLocales(sinFrase.length - frases.length)];
+  const frases = await frasesLocales(sinFrase.length);
   sinFrase.forEach((b, i) => { b.frase = frases[i]; });
   await db.putMany('blocks', sinFrase);
   return bloques;

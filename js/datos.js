@@ -1,6 +1,7 @@
 // Valores por defecto y acceso a la configuración guardada.
 import { kvGet, kvSet } from './db.js';
 import { tipoTurno } from './interprete.js';
+import { weekday } from './util.js';
 
 export const AREAS = [
   ['salud', '💪 Salud y deporte'], ['estudio', '📚 Estudio'], ['trabajo', '💼 Trabajo'],
@@ -45,13 +46,11 @@ export const catNombre = c => CATEGORIAS[c]?.n || 'Otros';
 export const catIcono = c => CATEGORIAS[c]?.i || '📦';
 
 const DEF_SETTINGS = {
-  apiKey: '',
-  modelo: 'gemini-flash-latest',
   tema: 'auto',
   importantes: 'alta', // ninguno | alta | todos
   nombreAtajo: 'MMV Horario',
 };
-const DEF_PROFILE = { nombre: '', sobreMi: '', rutina: '', fortalezas: '', debilidades: '', motivacion: '', tono: 'Cercano, directo y motivador, como un mentor que me conoce.' };
+const DEF_PROFILE = { nombre: '', sobreMi: '', rutina: '', fortalezas: '', debilidades: '', motivacion: '' };
 const DEF_PREFS = { sesionMin: 60, descansoMin: 10, maxHorasDia: 4 };
 // Franjas libres por día (lunes = 0).
 const DEF_DISPONIBILIDAD = [
@@ -73,11 +72,20 @@ export const getDisponibilidad = async () => kvGet('disponibilidad', DEF_DISPONI
 export const getTurnos = () => kvGet('turnos', null);
 export const saveTurnos = v => kvSet('turnos', v);
 
-/** Devuelve una función fecha → horas libres de ese día de la semana (según el turno que toque esa semana). */
+/**
+ * Devuelve una función fecha → horas libres de los 7 días de esa semana: según el turno que toque
+ * (si rotan) y con los cambios de un solo día que se le piden al asistente (kv «dispExtra»: { fecha: franjas }).
+ */
 export async function dispPorFecha() {
-  const [base, turnos] = await Promise.all([getDisponibilidad(), getTurnos()]);
-  if (!turnos?.rotativo) return () => base;
-  return fecha => turnos.disponibilidad?.[tipoTurno(turnos, fecha)] || base;
+  const [base, turnos, extra] = await Promise.all([getDisponibilidad(), getTurnos(), kvGet('dispExtra', {})]);
+  const semana = turnos?.rotativo ? fecha => turnos.disponibilidad?.[tipoTurno(turnos, fecha)] || base : () => base;
+  return fecha => {
+    const s = semana(fecha);
+    if (!extra?.[fecha]) return s;
+    const copia = [...s];
+    copia[weekday(fecha)] = extra[fecha];
+    return copia;
+  };
 }
 
 export const saveSettings = v => kvSet('settings', v);

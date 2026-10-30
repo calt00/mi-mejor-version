@@ -1,8 +1,7 @@
 // Bienvenida guiada: primeros pasos la primera vez que se abre la app.
 import { db, kvGet, kvSet } from '../db.js';
-import { AREAS, getProfile, saveProfile, getSettings, saveSettings, saveDisponibilidad } from '../datos.js';
+import { AREAS, getProfile, saveProfile, saveDisponibilidad } from '../datos.js';
 import { esc, opciones, toast, uid, hoyISO, refrescar } from '../util.js';
-import { probarConexion } from '../coach.js';
 import { editarDisponibilidad } from './horario.js';
 import { abrirPlan } from './plan.js';
 
@@ -17,14 +16,13 @@ const PRESETS = {
 };
 
 // La app monta el plan a partir de tu texto (sin IA); también se puede rellenar paso a paso.
-// La clave de Gemini es opcional y solo hace falta para el coach.
-const CON_TEXTO = ['hola', 'situacion', 'gemini', 'instalar'];
-const MANUAL = ['hola', 'nombre', 'horas', 'objetivo', 'gemini', 'instalar'];
+const CON_TEXTO = ['hola', 'situacion', 'asistente', 'instalar'];
+const MANUAL = ['hola', 'nombre', 'horas', 'objetivo', 'asistente', 'instalar'];
 
 export async function mostrarBienvenida() {
   if (document.querySelector('.bienvenida')) return;
-  const [perfil, settings, situacion] = await Promise.all([getProfile(), getSettings(), kvGet('miSituacion')]);
-  const datos = { nombre: perfil.nombre, preset: 'tardes', objetivo: null, apiKey: settings.apiKey, situacion: situacion?.texto || '', planAplicado: false };
+  const [perfil, situacion] = await Promise.all([getProfile(), kvGet('miSituacion')]);
+  const datos = { nombre: perfil.nombre, preset: 'tardes', objetivo: null, situacion: situacion?.texto || '', planAplicado: false };
   let PASOS = CON_TEXTO;
   const capa = document.createElement('div');
   capa.className = 'bienvenida';
@@ -49,7 +47,7 @@ export async function mostrarBienvenida() {
     hola: () => `
       <div class="b-ico">🌱</div>
       <h2>¡Hola! Empieza tu mejor versión</h2>
-      <p class="sub">Esta app te ayuda a <b>cumplir tus objetivos</b>, organizar tu <b>horario</b>, <b>ahorrar</b> con tu cerdito y tener un <b>coach</b> que te conoce.</p>
+      <p class="sub">Esta app te ayuda a <b>cumplir tus objetivos</b>, organizar tu <b>horario</b>, <b>ahorrar</b> con tu cerdito y tener un <b>asistente</b> que te ayuda cada día.</p>
       <p class="sub">Solo tienes que <b>contarme tu situación y lo que quieres conseguir</b>, con tus palabras. La app lo entiende y organiza tus objetivos, tus horas libres (también si trabajas a turnos), tus hábitos y tu horario. Sin claves ni registros.</p>
       <button class="btn ancho" data-sig>Empezar</button>`,
     situacion: () => `
@@ -62,7 +60,7 @@ export async function mostrarBienvenida() {
     nombre: () => `
       <div class="b-ico">👋</div>
       <h2>¿Cómo te llamas?</h2>
-      <p class="sub">Así tu coach te hablará por tu nombre.</p>
+      <p class="sub">Así tu asistente te hablará por tu nombre.</p>
       <input id="b-nombre" value="${esc(datos.nombre)}" placeholder="Tu nombre" autocomplete="given-name">
       <button class="btn ancho" data-sig>Siguiente</button>`,
     horas: () => `
@@ -84,19 +82,16 @@ export async function mostrarBienvenida() {
       </div>
       <button class="btn ancho" data-sig>Siguiente</button>
       <button class="btn gris ancho" data-saltar-paso style="margin-top:8px">Lo creo más tarde</button>`,
-    gemini: () => `
+    asistente: () => `
       <div class="b-ico">🤖</div>
-      <h2>Activa tu coach (opcional)</h2>
-      <p class="sub">Tu plan ya está hecho sin IA. Si además quieres chatear con un coach que te conoce, usa Gemini, la IA gratuita de Google. Necesitas una «clave» (API key):</p>
-      <ol class="sub" style="text-align:left;padding-left:20px">
-        <li>Abre <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> e inicia sesión con tu cuenta de Google.</li>
-        <li>Pulsa «Create API key» y cópiala.</li>
-        <li>Vuelve aquí y pégala abajo.</li>
-      </ol>
-      <input id="apiKey" type="password" value="${esc(datos.apiKey)}" placeholder="AIza…" autocomplete="off" autocapitalize="off" spellcheck="false">
-      <div class="acciones" style="justify-content:center"><button type="button" class="btn sec chico" id="probar">🔌 Probar</button></div>
-      <button class="btn ancho" data-sig>Siguiente</button>
-      <button class="btn gris ancho" data-saltar-paso style="margin-top:8px">Ahora no</button>`,
+      <h2>Tu asistente</h2>
+      <p class="sub">En la pestaña <b>Asistente</b> (y en la caja de «Hoy») puedes escribirle con tus palabras y lo hace al momento. Funciona sin internet:</p>
+      <ul class="sub" style="text-align:left;padding-left:20px">
+        <li>«¿Qué me toca hoy?»</li><li>«Ya he hecho inglés»</li><li>«Hoy no puedo» o «pásalo a mañana»</li>
+        <li>«Esta semana estoy de tarde»</li><li>«He gastado 5 € en café»</li>
+      </ul>
+      <p class="sub">Cada día te saludará con tu plan y, si algo se queda sin hacer, te propondrá moverlo.</p>
+      <button class="btn ancho" data-sig>Siguiente</button>`,
     instalar: () => {
       const instalada = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
       return `
@@ -129,12 +124,6 @@ export async function mostrarBienvenida() {
         sesionMin: null, momento: 'cualquiera', fechaLimite: '', creado: hoyISO(), archivado: false };
       await db.put('goals', g);
       datos.objetivo = g;
-    }
-    if (id === 'gemini') {
-      if (!saltar && val('#apiKey')) {
-        datos.apiKey = val('#apiKey');
-        await saveSettings({ ...(await getSettings()), apiKey: datos.apiKey });
-      }
     }
     if (id === 'situacion') {
       datos.situacion = val('#b-situacion');
@@ -183,16 +172,6 @@ export async function mostrarBienvenida() {
       if (!datos.personalizada) await saveDisponibilidad(PRESETS[datos.preset].v);
       datos.personalizada = true;
       editarDisponibilidad();
-    });
-    capa.querySelector('#probar')?.addEventListener('click', async e => {
-      const key = capa.querySelector('#apiKey').value.trim();
-      if (!key) return toast('Pega primero tu clave.');
-      await saveSettings({ ...(await getSettings()), apiKey: key });
-      datos.apiKey = key;
-      e.target.disabled = true; e.target.textContent = 'Probando…';
-      try { toast(`✅ ${await probarConexion()}`, 3500); }
-      catch (err) { toast(`❌ ${err.message}`, 5000); }
-      finally { e.target.disabled = false; e.target.textContent = '🔌 Probar'; }
     });
   }
   pintar();

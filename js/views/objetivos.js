@@ -2,8 +2,8 @@
 import { db } from '../db.js';
 import { AREAS, MOMENTOS, PRIORIDADES, areaNombre, areaColor, getPrefs } from '../datos.js';
 import { esc, sheet, formData, toast, refrescar, uid, hoyISO, weekDates, fmtHoras, opciones, miniMarkdown, diasEntre } from '../util.js';
-import { duracionMin, cargando } from './comun.js';
-import { comoEmpiezo, ErrorIA } from '../coach.js';
+import { duracionMin } from './comun.js';
+import { primerosPasos } from '../interprete.js';
 
 let verArchivados = false;
 
@@ -120,32 +120,27 @@ async function detalle(g) {
     close();
   });
 
-  el.querySelector('#empezar').addEventListener('click', async () => {
+  el.querySelector('#empezar').addEventListener('click', () => {
     const zona = el.querySelector('#ia');
-    zona.innerHTML = cargando('Tu coach está preparando un plan para arrancar…');
-    try {
-      const r = await comoEmpiezo(g, tasks);
-      zona.innerHTML = `<div class="card">
-        <div>${miniMarkdown(r.consejo)}</div>
-        <ol style="padding-left:20px;margin:10px 0">${r.pasos.map((p, i) => `<li style="margin-bottom:8px"><b>${esc(p.titulo)}</b><br><span class="sub">${esc(p.detalle)}</span>
-          <br><button class="btn sec chico" style="margin-top:4px" data-paso="${i}">+ Añadir como tarea</button></li>`).join('')}</ol>
-        <button class="btn ancho" id="todos">Añadir todos los pasos</button></div>`;
-      const anadir = async pasos => {
-        await db.putMany('tasks', pasos.map((p, i) => ({ id: uid(), goalId: g.id, titulo: p.titulo, hecho: false, creado: Date.now() + i })));
-        toast(pasos.length > 1 ? `✅ ${pasos.length} tareas añadidas` : '✅ Tarea añadida');
-      };
-      const anadidos = new Set();
-      zona.querySelectorAll('[data-paso]').forEach(b => b.addEventListener('click', async () => {
-        anadidos.add(Number(b.dataset.paso));
-        await anadir([r.pasos[b.dataset.paso]]); b.disabled = true; b.textContent = '✓ Añadida';
-      }));
-      zona.querySelector('#todos').addEventListener('click', async () => {
-        const pendientes = r.pasos.filter((_, i) => !anadidos.has(i));
-        if (pendientes.length) await anadir(pendientes);
-        reabrir();
-      });
-    } catch (e) {
-      zona.innerHTML = `<div class="aviso">${esc(e instanceof ErrorIA ? e.message : 'No se pudo generar el plan. Inténtalo de nuevo.')}</div>`;
-    }
+    const r = primerosPasos(g.titulo, tasks.map(t => t.titulo));
+    zona.innerHTML = `<div class="card">
+      <div>${miniMarkdown(r.consejo)}</div>
+      <ol style="padding-left:20px;margin:10px 0">${r.pasos.map((p, i) => `<li style="margin-bottom:8px"><b>${esc(p.titulo)}</b>
+        <br><button class="btn sec chico" style="margin-top:4px" data-paso="${i}">+ Añadir como tarea</button></li>`).join('')}</ol>
+      <button class="btn ancho" id="todos">Añadir todos los pasos</button></div>`;
+    const anadir = async pasos => {
+      await db.putMany('tasks', pasos.map((p, i) => ({ id: uid(), goalId: g.id, titulo: p.titulo, hecho: false, creado: Date.now() + i })));
+      toast(pasos.length > 1 ? `✅ ${pasos.length} tareas añadidas` : '✅ Tarea añadida');
+    };
+    const anadidos = new Set();
+    zona.querySelectorAll('[data-paso]').forEach(b => b.addEventListener('click', async () => {
+      anadidos.add(Number(b.dataset.paso));
+      await anadir([r.pasos[b.dataset.paso]]); b.disabled = true; b.textContent = '✓ Añadida';
+    }));
+    zona.querySelector('#todos').addEventListener('click', async () => {
+      const pendientes = r.pasos.filter((_, i) => !anadidos.has(i));
+      if (pendientes.length) await anadir(pendientes);
+      reabrir();
+    });
   });
 }

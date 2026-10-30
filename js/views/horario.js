@@ -2,10 +2,9 @@
 import { db } from '../db.js';
 import { getDisponibilidad, saveDisponibilidad, getPrefs, savePrefs, getSettings, getTurnos, saveTurnos, dispPorFecha } from '../datos.js';
 import { tipoTurno, posicionEnPatron } from '../interprete.js';
-import { esc, sheet, toast, refrescar, uid, hoyISO, addDays, weekDates, weekday, fmtFecha, DIAS, toMin, opciones } from '../util.js';
-import { bloqueHTML, conectarBloques, abrirEditorBloque, abrirEnvioIphone, cargando } from './comun.js';
-import { generarSemana, validarBloques, seConserva, ordenarBloques, esImportante } from '../scheduler.js';
-import { horarioPorPeticion, ErrorIA } from '../coach.js';
+import { esc, sheet, toast, refrescar, hoyISO, addDays, weekDates, weekday, fmtFecha, DIAS, toMin, opciones } from '../util.js';
+import { bloqueHTML, conectarBloques, abrirEditorBloque, abrirEnvioIphone } from './comun.js';
+import { generarSemana, ordenarBloques } from '../scheduler.js';
 import { asignarFrases } from '../iphone.js';
 import { abrirPlan } from './plan.js';
 
@@ -40,7 +39,6 @@ export async function render(root) {
     ${turnos?.rotativo ? `<p class="mini centro" style="margin:-6px 0 10px">🏭 ${estado.modo === 'dia' ? 'Ese día' : 'Esa semana'} estás de turno de <b>${TURNO_TXT[tipoTurno(turnos, estado.fecha)]}</b></p>` : ''}
     <div class="chips">
       <button class="chip activa" id="plan">🧠 Mi plan a medida</button>
-      <button class="chip" id="pedir">✨ Pídeme tu horario</button>
       <button class="chip" id="generar">⚙️ Generar semana</button>
       <button class="chip" id="enviar">📲 Enviar al iPhone</button>
       <button class="chip" id="disp">🕒 Disponibilidad</button>
@@ -62,7 +60,6 @@ export async function render(root) {
   root.querySelectorAll('[data-anadir]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); abrirEditorBloque(null, { fecha: a.dataset.anadir }); }));
   root.querySelector('#nuevo').addEventListener('click', () => abrirEditorBloque(null, { fecha: estado.fecha < hoy ? hoy : estado.fecha }));
   root.querySelector('#plan').addEventListener('click', () => abrirPlan());
-  root.querySelector('#pedir').addEventListener('click', () => abrirPeticionHorario());
   root.querySelector('#generar').addEventListener('click', generar);
   root.querySelector('#enviar').addEventListener('click', () => abrirEnvioIphone(estado.modo === 'semana' ? 'semana' : estado.fecha === addDays(hoy, 1) ? 'manana' : 'hoy'));
   root.querySelector('#disp').addEventListener('click', editarDisponibilidad);
@@ -81,82 +78,6 @@ async function generar() {
   refrescar();
   toast(nuevos.length ? `🗓️ ${nuevos.length} bloques planificados` : 'No se ha podido planificar nada');
   asignarFrases(nuevos).then(refrescar).catch(() => {});
-}
-
-// Horario en lenguaje natural con vista previa (Aceptar / Ajustar / Descartar).
-export async function abrirPeticionHorario(textoInicial = '') {
-  const ejemplos = ['Mañana salgo a las 15h, quiero estudiar 2h, ir al gimnasio y leer antes de dormir',
-    'Organízame el fin de semana con tiempo para descansar',
-    'Reorganiza mi semana, el jueves no puedo por la tarde',
-    'Hoy tengo 3 horas libres desde las 17h, ¿qué hago?'];
-  const { el, close } = sheet('✨ Pídeme tu horario', `
-    <p class="sub">Escríbeme lo que necesitas como si me lo contaras. Tendré en cuenta tus objetivos, tu disponibilidad y lo que ya tienes fijado.</p>
-    <form id="f"><textarea name="peticion" required placeholder="Ej.: ${esc(ejemplos[0])}">${esc(textoInicial)}</textarea>
-      <div class="chips" style="margin-top:8px">${ejemplos.slice(1).map(e => `<button type="button" class="chip" data-ej="${esc(e)}">${esc(e)}</button>`).join('')}</div>
-      <button class="btn ancho" style="margin-top:6px">Crear propuesta</button></form>
-    <div id="res"></div>`);
-  const form = el.querySelector('#f'), res = el.querySelector('#res');
-  el.querySelectorAll('[data-ej]').forEach(b => b.addEventListener('click', () => { form.peticion.value = b.dataset.ej; form.peticion.focus(); }));
-
-  let historial = [];
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
-    const texto = form.peticion.value.trim();
-    if (!texto) return;
-    historial.push(texto);
-    const peticion = historial.length > 1 ? `${historial[0]}\nAjustes pedidos después: ${historial.slice(1).join(' | ')}` : texto;
-    res.innerHTML = cargando('Organizando tu horario…');
-    form.querySelector('button.btn').disabled = true;
-    try {
-      const [goals, blocks, disponibilidad, settings] = await Promise.all([db.all('goals'), db.all('blocks'), dispPorFecha(), getSettings()]);
-      const hoy = hoyISO(), limite = addDays(hoy, 14);
-      const fijos = blocks.filter(b => b.fecha >= hoy && b.fecha <= limite && seConserva(b));
-      const r = await horarioPorPeticion(peticion, fijos);
-      const goalPorTitulo = t => t && goals.find(g => g.titulo.toLowerCase() === t.toLowerCase());
-      const propuestos = (r.bloques || []).filter(b => b.fecha >= hoy).map(b => {
-        const g = goalPorTitulo(b.objetivo);
-        return { id: uid(), fecha: b.fecha, inicio: b.inicio, fin: b.fin, titulo: b.titulo, goalId: g?.id || null,
-          importante: Boolean(b.importante) || esImportante(g, settings), fijado: false, hecho: false, frase: '', origen: 'ia' };
-      });
-      const { validos, avisos } = validarBloques(propuestos, fijos, disponibilidad);
-      const dias = [...new Set(validos.map(b => b.fecha))].sort();
-      const reemplaza = blocks.filter(b => dias.includes(b.fecha) && !seConserva(b));
-
-      res.innerHTML = `<div class="card" style="margin-top:12px">
-        <p>${esc(r.resumen || '')}</p>
-        ${avisos.length ? `<div class="aviso">${avisos.map(esc).join('<br>')}</div>` : ''}
-        ${dias.map(f => `<div class="dia-titulo"><span>${fmtFecha(f, { weekday: 'long', day: 'numeric', month: 'short' })}</span></div>
-          <div class="card plano" style="background:var(--card2)"><ul class="lista">${validos.filter(b => b.fecha === f).map(b => `
-            <li><span class="mini" style="width:86px;flex:none">${b.inicio}–${b.fin}</span><div class="grow">${b.importante ? '⏰ ' : ''}${esc(b.titulo)}</div></li>`).join('')}</ul></div>`).join('') || '<p class="sub">No hay bloques en la propuesta.</p>'}
-        ${reemplaza.length ? `<p class="mini">Sustituirá ${reemplaza.length} bloques no fijados de esos días.</p>` : ''}
-        <div class="acciones">
-          <button class="btn verde" id="aceptar" ${validos.length ? '' : 'disabled'}>✓ Aceptar</button>
-          <button class="btn sec" id="ajustar">✏️ Ajustar</button>
-          <button class="btn gris" id="descartar">Descartar</button>
-        </div></div>`;
-      res.querySelector('#aceptar').addEventListener('click', async () => {
-        await db.delMany('blocks', reemplaza.map(b => b.id));
-        await db.putMany('blocks', validos);
-        close();
-        estado.fecha = dias[0]; estado.modo = dias.length > 1 ? 'semana' : 'dia'; estado.avisos = [];
-        if (location.hash !== '#horario') location.hash = '#horario'; else refrescar();
-        toast(`🗓️ Horario guardado (${validos.length} bloques)`);
-        asignarFrases(validos).then(refrescar).catch(() => {});
-      });
-      res.querySelector('#ajustar').addEventListener('click', () => {
-        form.peticion.value = ''; form.peticion.placeholder = 'Dime qué cambio: «el gimnasio mejor a las 19h», «más descanso»…';
-        form.peticion.focus();
-      });
-      res.querySelector('#descartar').addEventListener('click', close);
-    } catch (err) {
-      historial.pop();
-      res.innerHTML = `<div class="aviso" style="margin-top:12px">${esc(err instanceof ErrorIA ? err.message : 'No se pudo crear la propuesta. Inténtalo de nuevo.')}</div>
-        ${err instanceof ErrorIA ? '<p class="mini">Mientras tanto puedes usar «⚙️ Generar semana», que funciona sin IA.</p>' : ''}`;
-      console.error(err);
-    } finally {
-      form.querySelector('button.btn').disabled = false;
-    }
-  });
 }
 
 export async function editarDisponibilidad() {
