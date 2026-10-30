@@ -1,7 +1,8 @@
 // Pantalla «Objetivos»: lista, detalle con tareas y «¿Cómo empiezo?».
 import { db } from '../db.js';
 import { AREAS, MOMENTOS, PRIORIDADES, areaNombre, areaColor, getPrefs } from '../datos.js';
-import { esc, sheet, formData, toast, refrescar, uid, hoyISO, weekDates, fmtHoras, opciones, miniMarkdown, diasEntre } from '../util.js';
+import { esc, sheet, formData, toast, refrescar, uid, hoyISO, weekDates, fmtHoras, opciones, miniMarkdown, diasEntre, DIAS_CORTO } from '../util.js';
+import { sesionDe } from '../configuracion.js';
 import { duracionMin } from './comun.js';
 import { primerosPasos } from '../interprete.js';
 
@@ -62,6 +63,8 @@ export async function editarObjetivo(g = null, valores = {}) {
         <label class="campo"><span>Horas por semana</span><input type="number" name="horasSemana" min="0" max="80" step="0.5" value="${v.horasSemana ?? ''}"></label>
         <label class="campo"><span>Sesión (min)</span><input type="number" name="sesionMin" min="15" max="240" step="15" value="${v.sesionMin ?? ''}" placeholder="${prefs.sesionMin}"></label>
       </div>
+      <span class="cfg-etiqueta">¿Qué días? (si no eliges ninguno, cualquier día)</span>
+      <div class="dias-sel" style="margin-bottom:12px">${DIAS_CORTO.map((l, i) => `<label class="dia-check"><input type="checkbox" name="dia${i}" ${v.dias?.includes(i) ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
       <label class="campo"><span>Mejor momento del día</span><select name="momento">${opciones(MOMENTOS, v.momento)}</select></label>
       <label class="campo"><span>Fecha límite (opcional)</span><input type="date" name="fechaLimite" value="${v.fechaLimite || ''}"></label>
       <button class="btn ancho">${g ? 'Guardar' : 'Crear objetivo'}</button>
@@ -69,8 +72,12 @@ export async function editarObjetivo(g = null, valores = {}) {
   el.querySelector('form').addEventListener('submit', async e => {
     e.preventDefault();
     const d = formData(e.target);
+    const dias = [0, 1, 2, 3, 4, 5, 6].filter(i => d[`dia${i}`]);
+    for (let i = 0; i < 7; i++) delete d[`dia${i}`];
+    // Con días elegidos y sin duración puesta, cada sesión es el reparto de las horas entre esos días.
+    const sesionMin = d.sesionMin || (dias.length && d.horasSemana ? sesionDe(d.horasSemana, dias) : null);
     await db.put('goals', { id: g?.id || uid(), creado: g?.creado || hoyISO(), archivado: g?.archivado || false, ...d,
-      prioridad: Number(d.prioridad), horasSemana: d.horasSemana || 0, sesionMin: d.sesionMin || null });
+      prioridad: Number(d.prioridad), horasSemana: d.horasSemana || 0, sesionMin, dias });
     close(); refrescar();
     toast(g ? 'Objetivo guardado' : '🎯 ¡Objetivo creado! Ve a Horario para planificarlo.');
   });

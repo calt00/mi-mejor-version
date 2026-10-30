@@ -10,12 +10,13 @@ App web personal (PWA) para iPhone: objetivos, horario inteligente, asistente pr
 - **Enviar al iPhone**: crea Recordatorios (y Alarmas para lo importante) con una frase motivadora mediante un Atajo de iOS.
 - **Ahorro**: nómina, gastos fijos y diarios, metas con cerdito que crece y evoluciona, recomendaciones para ahorrar más y retos semanales.
 - **Asistente** (sin IA): chat que entiende órdenes con tus palabras y gestiona el día: «¿qué me toca hoy?», «ya he hecho inglés», «hoy no puedo», «pásalo a mañana», «añade 1 hora de inglés el sábado», «hoy tengo libre de 5 a 8», «esta semana estoy de tarde», «he gastado 5 € en café», «aparto 20 € para el viaje», «¿cómo voy?», «no tengo ganas»… Cada cambio se puede deshacer. Cada día te saluda con tu plan, te pregunta por lo que quedó sin marcar y por la noche te hace un resumen.
-- **Plan a medida (sin IA)**: escribes tu situación y tus propósitos con tus palabras; el intérprete de la app (reglas, sin internet ni claves) entiende tu trabajo o clases, **turnos rotativos**, turnos de noche, jornada partida, horarios distintos cada día, llevar y recoger a los niños, objetivos, hábitos y dinero, te enseña lo que ha entendido y supuesto, y crea el horario de esta semana y la siguiente. Se corrige escribiendo («me levanto a las 6») o con desplegables. Es el primer paso de la bienvenida y se puede rehacer desde Horario o Perfil.
+- **Configuración paso a paso** (sin escribir): ¿trabajas o estudias? (horario fijo con jornada partida, turnos rotativos o distinto cada día, y trayecto), a qué hora te levantas y te acuestas, y tus objetivos (nombre, horas a la semana con un contador, días de la semana y momento preferido, avisando de si caben). Termina con la semana de ejemplo y crea el horario. Es la bienvenida y se puede repetir desde Horario («📝 Mi plan») o Perfil.
+- **Plan con un texto (en pruebas)**: en Perfil → «🧪 En pruebas», escribes tu situación con tus palabras y el intérprete de la app (reglas, sin internet) entiende trabajo o clases, turnos, objetivos, hábitos y dinero, y te enseña lo que ha entendido antes de guardar.
 - **Turnos rotativos**: horas libres distintas para cada turno; la app sabe qué turno te toca cada semana y cambia el horario sola.
 - **Progreso**: gráfica del % cumplido cada día (7/30/90 días) con su media, horas por objetivo, calendario de cada hábito y 15 logros con medallas.
 - **Revisión semanal**: los domingos (o hasta el miércoles siguiente), resumen de la semana y 3 ideas para la próxima, calculadas con tus números.
 - **Modo concentración**: temporizador (hasta el final del bloque o Pomodoro 25/5) que marca el bloque como hecho al terminar.
-- **Bienvenida guiada** la primera vez, **aviso de copia de seguridad** cada 7 días y **aviso de versión nueva** al publicar cambios.
+- **Aviso de copia de seguridad** cada 7 días y **aviso de versión nueva** al publicar cambios.
 
 ## Probar en el ordenador
 
@@ -47,7 +48,8 @@ Después de cambiar archivos, sube `VERSION` en `sw.js` para que el iPhone desca
 | `js/scheduler.js` | Generador y validación de horarios |
 | `js/finanzas.js` | Presupuesto, metas y recomendaciones de ahorro |
 | `js/cerdito.js` | Cerdito hucha en SVG |
-| `js/interprete.js` | Intérprete de texto sin IA y cálculo de turnos rotativos |
+| `js/configuracion.js` | Respuestas del cuestionario → horas libres, turnos y objetivos |
+| `js/interprete.js` | Intérprete de texto sin IA (en pruebas), cálculo de horas libres y turnos rotativos |
 | `js/plan.js` | Validación del plan antes de guardarlo |
 | `js/progreso.js` | Cálculos de progreso diario, rachas y resumen semanal |
 | `js/logros.js` | Logros y medallas |

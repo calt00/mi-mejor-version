@@ -65,8 +65,11 @@ export function generarSemana({ fecha, goals, blocks, disponibilidad, prefs, set
   for (const g of activos) {
     const yaPuesto = conservados.filter(b => b.goalId === g.id && b.fecha >= desde).reduce((a, b) => a + duracion(b), 0);
     const sesion = g.sesionMin || prefs.sesionMin || 60;
-    // Redondeado a sesiones completas (al menos una), para no crear sesiones de 21 minutos.
-    const objetivo = fraccion < 1 ? Math.max(sesion, Math.round(g.horasSemana * 60 * fraccion / sesion) * sesion) : g.horasSemana * 60;
+    // Con días elegidos, una sesión por cada uno de esos días que aún quedan. Si no, redondeado a sesiones
+    // completas (al menos una), para no crear sesiones de 21 minutos.
+    const objetivo = g.dias?.length
+      ? (fraccion < 1 ? sesion * fechas.filter(f => g.dias.includes(weekday(f))).length : g.horasSemana * 60)
+      : fraccion < 1 ? Math.max(sesion, Math.round(g.horasSemana * 60 * fraccion / sesion) * sesion) : g.horasSemana * 60;
     resto[g.id] = objetivo - yaPuesto;
   }
 
@@ -89,6 +92,7 @@ export function generarSemana({ fecha, goals, blocks, disponibilidad, prefs, set
     let mejor = null;
     dias.forEach((d, idx) => {
       if (d.carga + L > maxDia) return;
+      if (g.dias?.length && (!g.dias.includes(weekday(d.fecha)) || d.porGoal[g.id])) return; // solo los días que eligió, una vez cada uno
       for (const [s, e] of d.libres) {
         if (e - s < L) continue;
         // También al final del hueco, para no partirlo en trozos que luego no sirvan a otro objetivo.

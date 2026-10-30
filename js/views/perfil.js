@@ -4,6 +4,7 @@ import { getProfile, saveProfile, getSettings, saveSettings } from '../datos.js'
 import { esc, formData, toast, refrescar, sheet, miniMarkdown, hoyISO, opciones, fmtFecha } from '../util.js';
 import { mostrarBienvenida } from './bienvenida.js';
 import { abrirPlan } from './plan.js';
+import { abrirConfigurador } from './configurar.js';
 
 export async function render(root) {
   const [p, s, ultimaCopia, situacion] = await Promise.all([getProfile(), getSettings(), kvGet('ultimaCopia'), kvGet('miSituacion')]);
@@ -15,10 +16,9 @@ export async function render(root) {
     ${!instalada ? `<div class="aviso">📱 <b>Instálala en tu iPhone</b>: en Safari pulsa Compartir → «Añadir a pantalla de inicio». Así se abre como una app y tus datos quedan a salvo. <a href="#" data-guia="acceso-rapido">Ver cómo</a></div>` : ''}
 
     <div class="card">
-      <h3 style="margin-bottom:4px">📝 Tu situación y tus propósitos</h3>
-      <p class="mini" style="margin-bottom:10px">${situacion?.texto ? `Me lo contaste el ${fmtFecha(situacion.fecha, { day: 'numeric', month: 'long' })}. Si tu vida cambia (nuevo trabajo, exámenes, vacaciones…), actualízalo y rehago tu plan.` : 'Cuéntame tu vida y tus objetivos con tus palabras y organizo tu horario, tus hábitos y tu ahorro por ti.'}</p>
-      ${situacion?.texto ? `<p class="nota" style="white-space:pre-line;max-height:120px;overflow:hidden">${esc(situacion.texto)}</p>` : ''}
-      <button class="btn ancho" id="plan">${situacion?.texto ? '✏️ Actualizar y rehacer mi plan' : '🧠 Crear mi plan a medida'}</button>
+      <h3 style="margin-bottom:4px">📝 Tu horario y tus objetivos</h3>
+      <p class="mini" style="margin-bottom:10px">Si cambia tu trabajo, tus horas o lo que quieres conseguir, vuelve a responder las preguntas y rehago tu horario.</p>
+      <button class="btn ancho" id="configurar">Cambiar mis respuestas</button>
     </div>
 
     <form id="perfil" class="card">
@@ -59,6 +59,12 @@ export async function render(root) {
         <label class="btn gris chico">⬆️ Importar copia<input type="file" id="importar" accept="application/json,.json" hidden></label>
       </div>
     </div>
+    <div class="card en-pruebas">
+      <h3 style="margin-bottom:4px">🧪 En pruebas</h3>
+      <p class="mini" style="margin-bottom:10px">Crear el plan escribiendo tu situación con tus palabras, en vez de con las preguntas. Aún no lo entiende todo: lo iremos mejorando. Antes de guardar nada te enseña lo que ha entendido.</p>
+      ${situacion?.texto ? `<p class="mini">Último texto: ${esc(fmtFecha(situacion.fecha, { day: 'numeric', month: 'long' }))}.</p>` : ''}
+      <button class="btn gris ancho" id="plan">✍️ Crear el plan con un texto (beta)</button>
+    </div>
     <p class="mini centro" style="margin:20px 0">Mi Mejor Versión · hecha para ti 💜</p>`;
 
   root.querySelector('#perfil').addEventListener('submit', async e => {
@@ -81,6 +87,7 @@ export async function render(root) {
   root.querySelector('#exportar').addEventListener('click', async () => { if (await exportar()) refrescar(); });
   root.querySelector('#bienvenida').addEventListener('click', mostrarBienvenida);
   root.querySelector('#plan').addEventListener('click', () => abrirPlan());
+  root.querySelector('#configurar').addEventListener('click', abrirConfigurador);
   root.querySelector('#importar').addEventListener('change', async e => {
     const file = e.target.files[0];
     if (!file) return;

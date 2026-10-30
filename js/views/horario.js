@@ -6,7 +6,7 @@ import { esc, sheet, toast, refrescar, hoyISO, addDays, weekDates, weekday, fmtF
 import { bloqueHTML, conectarBloques, abrirEditorBloque, abrirEnvioIphone } from './comun.js';
 import { generarSemana, ordenarBloques } from '../scheduler.js';
 import { asignarFrases } from '../iphone.js';
-import { abrirPlan } from './plan.js';
+import { abrirConfigurador } from './configurar.js';
 
 const estado = { modo: 'dia', fecha: hoyISO(), avisos: [] };
 const TURNO_TXT = { manana: 'mañana', tarde: 'tarde', noche: 'noche' };
@@ -38,7 +38,7 @@ export async function render(root) {
     </div>
     ${turnos?.rotativo ? `<p class="mini centro" style="margin:-6px 0 10px">🏭 ${estado.modo === 'dia' ? 'Ese día' : 'Esa semana'} estás de turno de <b>${TURNO_TXT[tipoTurno(turnos, estado.fecha)]}</b></p>` : ''}
     <div class="chips">
-      <button class="chip activa" id="plan">🧠 Mi plan a medida</button>
+      <button class="chip activa" id="plan">📝 Mi plan</button>
       <button class="chip" id="generar">⚙️ Generar semana</button>
       <button class="chip" id="enviar">📲 Enviar al iPhone</button>
       <button class="chip" id="disp">🕒 Disponibilidad</button>
@@ -59,7 +59,7 @@ export async function render(root) {
   root.querySelector('#ir-hoy')?.addEventListener('click', e => { e.preventDefault(); estado.fecha = hoy; refrescar(); });
   root.querySelectorAll('[data-anadir]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); abrirEditorBloque(null, { fecha: a.dataset.anadir }); }));
   root.querySelector('#nuevo').addEventListener('click', () => abrirEditorBloque(null, { fecha: estado.fecha < hoy ? hoy : estado.fecha }));
-  root.querySelector('#plan').addEventListener('click', () => abrirPlan());
+  root.querySelector('#plan').addEventListener('click', abrirConfigurador);
   root.querySelector('#generar').addEventListener('click', generar);
   root.querySelector('#enviar').addEventListener('click', () => abrirEnvioIphone(estado.modo === 'semana' ? 'semana' : estado.fecha === addDays(hoy, 1) ? 'manana' : 'hoy'));
   root.querySelector('#disp').addEventListener('click', editarDisponibilidad);

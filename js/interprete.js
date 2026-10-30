@@ -496,16 +496,34 @@ function aplicarModificadores(o, seg, hoy) {
   o.horasSemana = Math.round(o.horasSemana * 2) / 2;
 }
 
+/**
+ * Horas libres de los 7 días a partir de datos ya ordenados (los del cuestionario paso a paso).
+ * trabajos: [{ ini, fin, dias: Set, turno? }] (fin > 1440 si acaba al día siguiente); levantar/acostar en minutos.
+ * Con `tipos` (turnos rotativos) devuelve una plantilla por turno: { manana: [7 días], tarde: [...] }.
+ */
+export function calcularLibres({ trabajos = [], trayecto = 0, levantar = null, acostar = null, tipos = null, sinTrabajo = false }) {
+  const sueño = { general: {} };
+  if (levantar != null) sueño.general.levantar = levantar;
+  if (acostar != null) sueño.general.acostar = acostar;
+  const lista = trabajos.map(c => ({ tipo: 'trabajo', que: 'trabajo', turno: null, ...c }));
+  const diasTrabajo = new Set(lista.flatMap(c => [...c.dias]));
+  const plantilla = tipo => [0, 1, 2, 3, 4, 5, 6].map(d => franjasLibres({ d, tipo, compromisos: lista, trabajos: lista, diasTrabajo,
+    turnos: tipos ? { rotativo: true } : null, trayecto, sueño, diasDescanso: new Set(), sinTrabajo }));
+  return tipos ? Object.fromEntries(tipos.map(tp => [tp, plantilla(tp)])) : plantilla(null);
+}
+
 // Franjas libres de un día de la semana (d: 0 lunes … 6 domingo) para un turno concreto (o sin turnos).
 function franjasLibres({ d, tipo, compromisos, trabajos, diasTrabajo, turnos, trayecto, sueño, diasDescanso, sinTrabajo }) {
   if (diasDescanso.has(d)) return [];
   const trabajosHoy = trabajos.filter(c => (turnos ? (c.turno ? c.turno === tipo : true) : true) && c.dias.has(d) && !(turnos && !c.turno && trabajos.some(x => x.turno)));
   const sinCompromisos = !trabajos.length && !compromisos.length;
-  // Sin trabajo: mañanas y tardes. Sin datos de horario: tardes entre semana y algo más el fin de semana.
-  if (sinTrabajo && sinCompromisos) return [{ inicio: '10:00', fin: '13:30' }, { inicio: '16:00', fin: '20:00' }];
-  if (sinCompromisos) return d < 5 ? [{ inicio: '18:00', fin: '21:00' }] : [{ inicio: '10:00', fin: '13:30' }, { inicio: '17:00', fin: '20:30' }];
-
   const s = { ...sueño.general, ...(tipo && sueño[tipo]) };
+  // Sin horario ni horas de sueño: si no trabaja, mañanas y tardes; si no lo sabemos, tardes y algo más el fin de semana.
+  if (sinCompromisos && s.levantar == null && s.acostar == null) {
+    if (sinTrabajo) return [{ inicio: '10:00', fin: '13:30' }, { inicio: '16:00', fin: '20:00' }];
+    return d < 5 ? [{ inicio: '18:00', fin: '21:00' }] : [{ inicio: '10:00', fin: '13:30' }, { inicio: '17:00', fin: '20:30' }];
+  }
+
   const primero = trabajosHoy.length ? Math.min(...trabajosHoy.map(c => c.ini)) : null;
   const ultimo = trabajosHoy.length ? Math.max(...trabajosHoy.map(c => c.fin)) : null;
   let levantar = s.levantar ?? (primero != null && primero < 600 ? Math.floor((primero - trayecto - 50) / 5) * 5 : primero != null && primero < 840 ? 450 : primero != null && primero >= 1200 ? 840 : 540);

@@ -27,6 +27,7 @@
     import { normalizarPlan, cruzarConExistentes, unirFranjas, normalizarTurnos } from '../js/plan.js';
     import { interpretarTexto, tipoTurno } from '../js/interprete.js';
     import { entender } from '../js/agente.js';
+    import { estadoInicial, libresDe, sesionDe, encaje, minutosLibresPorDia, objetivosDe, inicioCiclo, maxHorasDiaDe } from '../js/configuracion.js';
 
     const lista = document.getElementById('lista');
     let ok = 0, ko = 0;
@@ -488,6 +489,75 @@ Cobro 1.500 € al mes el día 28, pago 550 € de alquiler y quiero ahorrar 2.0
       const s2 = generarSemana({ fecha: addDays(lunes, 7), goals: g, blocks: [], disponibilidad: disp, prefs, settings }).nuevos;
       verdad(s1.length && s1.every(b => b.inicio >= '18:00'), `semana de mañana: ${s1.map(b => b.inicio)}`);
       verdad(s2.length && s2.every(b => b.fin <= '11:00'), `semana de tarde: ${s2.map(b => b.inicio)}`);
+    });
+
+    // ---------- Cuestionario paso a paso ----------
+    const cfg = cambios => Object.assign(estadoInicial(), { trabaja: true, levantar: '07:00', acostar: '23:30' }, cambios);
+    const franjasDe = (libres, d) => libres.disponibilidad[d];
+    const chocaCon = (franjas, a, b) => franjas.some(f => toMin(f.inicio) < toMin(b) && toMin(f.fin) > toMin(a));
+
+    prueba('Cuestionario: horario fijo de lunes a viernes', () => {
+      const l = libresDe(cfg({}), HOY_T);
+      igual(l.turnos, null);
+      verdad(!chocaCon(franjasDe(l, 0), '08:15', '18:00'), `lunes: ${JSON.stringify(franjasDe(l, 0))}`);
+      verdad(chocaCon(franjasDe(l, 5), '09:00', '12:00'), 'el sábado tiene la mañana libre');
+    });
+
+    prueba('Cuestionario: jornada partida y horario distinto cada día', () => {
+      let l = libresDe(cfg({ fijo: { dias: [0, 1, 2, 3, 4, 5], tramos: [{ inicio: '10:00', fin: '14:00' }, { inicio: '17:00', fin: '21:00' }] } }), HOY_T);
+      verdad(!chocaCon(franjasDe(l, 2), '09:15', '14:30') && !chocaCon(franjasDe(l, 2), '16:15', '21:30'), JSON.stringify(franjasDe(l, 2)));
+      const variable = estadoInicial().variable.map((d, i) => ({ ...d, activo: i === 0, inicio: '08:00', fin: '15:00' }));
+      l = libresDe(cfg({ tipoHorario: 'variable', variable }), HOY_T);
+      verdad(!chocaCon(franjasDe(l, 0), '07:15', '15:30'), 'el lunes trabaja');
+      verdad(chocaCon(franjasDe(l, 1), '09:00', '12:00'), 'el martes no trabaja');
+    });
+
+    prueba('Cuestionario: turnos rotativos de viernes a martes', () => {
+      const e = cfg({ tipoHorario: 'turnos' });
+      e.turnos.dias = [4, 5, 6, 0, 1];
+      e.turnos.tipos.manana = { activo: true, inicio: '06:40', fin: '14:50', semanas: 1 };
+      e.turnos.tipos.tarde = { activo: true, inicio: '14:50', fin: '22:55', semanas: 2 };
+      e.turnos.actual = 'manana';
+      igual(inicioCiclo(e.turnos.dias), 4, 'el ciclo empieza en viernes');
+      const { turnos } = libresDe(e, '2026-10-30');
+      igual(turnos.patron.join(), 'manana,tarde,tarde');
+      igual(tipoTurno(turnos, '2026-10-30'), 'manana'); igual(tipoTurno(turnos, '2026-11-06'), 'tarde'); igual(tipoTurno(turnos, '2026-11-20'), 'manana');
+      verdad(!chocaCon(turnos.disponibilidad.manana[4], '05:30', '16:15'), `viernes de mañana: ${JSON.stringify(turnos.disponibilidad.manana[4])}`);
+      verdad(!chocaCon(turnos.disponibilidad.tarde[4], '14:00', '23:59'), `viernes de tarde: ${JSON.stringify(turnos.disponibilidad.tarde[4])}`);
+    });
+
+    prueba('Cuestionario: sin trabajo usa las horas de levantarse y acostarse', () => {
+      const l = libresDe(cfg({ trabaja: false, levantar: '09:00', acostar: '23:00' }), HOY_T);
+      verdad(franjasDe(l, 0).every(f => toMin(f.inicio) >= toMin('09:00') && toMin(f.fin) <= toMin('23:00')), JSON.stringify(franjasDe(l, 0)));
+      verdad(minutosLibresPorDia(l)[0] >= 8 * 60, 'tiene muchas horas libres');
+    });
+
+    prueba('Cuestionario: sesiones, encaje y máximo diario', () => {
+      igual(sesionDe(3, [0, 2, 4]), 60, '3 h en 3 días'); igual(sesionDe(2, [0, 1, 2, 3, 4, 5, 6]), 15); igual(sesionDe(1.5, [5]), 90);
+      const libresDia = [60, 0, 600, 600, 600, 600, 600];
+      const o = { titulo: 'Inglés', horasSemana: 3, dias: [0, 1, 2] };
+      const r = encaje(o, [o], libresDia);
+      igual(r.porDia, 60); igual(r.diasSinHueco.join(), '0,1', 'lunes justo (60 + descanso) y martes sin hueco');
+      igual(maxHorasDiaDe([o, { titulo: 'Leer', horasSemana: 1.5, dias: [0, 1, 2] }]), 1.5);
+    });
+
+    prueba('Cuestionario: guarda objetivos nuevos, actualiza y archiva', () => {
+      const existentes = [{ id: 'g1', titulo: 'Leer', horasSemana: 2, prioridad: 1, area: 'personal', creado: '2026-01-01' }, { id: 'g2', titulo: 'Viejo', horasSemana: 1 }];
+      const e = cfg({ objetivos: [{ id: 'g1', titulo: 'Leer más', horasSemana: 3, dias: [0, 2, 4], momento: 'noche' }, { id: null, titulo: 'Inglés', horasSemana: 2, dias: [1, 3], momento: 'cualquiera' }, { id: null, titulo: '  ', horasSemana: 2, dias: [1] }] });
+      const r = objetivosDe(e, existentes, HOY_T);
+      igual(r.guardar.length, 2, 'el vacío no se guarda');
+      const leer = r.guardar.find(g => g.id === 'g1');
+      igual(leer.titulo, 'Leer más'); igual(leer.sesionMin, 60); igual(leer.creado, '2026-01-01'); igual(leer.prioridad, 1, 'conserva la prioridad');
+      const ingles = r.guardar.find(g => g.titulo === 'Inglés');
+      igual(ingles.area, 'estudio'); igual(ingles.dias.join(), '1,3'); igual(ingles.sesionMin, 60);
+      verdad(r.tareas.length && r.tareas.every(t => t.goalId === ingles.id), 'tareas para el nuevo');
+      igual(r.archivar.map(g => g.id).join(), 'g2', 'el que se quitó se archiva');
+    });
+
+    prueba('Generador: solo pone cada objetivo en los días elegidos', () => {
+      const libre = Array.from({ length: 7 }, () => [{ inicio: '17:00', fin: '22:00' }]);
+      const { nuevos } = generarSemana({ fecha: lunes, goals: [{ id: 'D', titulo: 'D', horasSemana: 2, prioridad: 2, sesionMin: 60, dias: [1, 3] }], blocks: [], disponibilidad: libre, prefs, settings });
+      igual(nuevos.map(b => weekday(b.fecha)).sort().join(), '1,3');
     });
 
     // ---------- Asistente: entiende las órdenes ----------
