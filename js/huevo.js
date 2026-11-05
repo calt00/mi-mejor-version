@@ -3,34 +3,72 @@
 // lo calienta más y un día flojo lo enfría un poco. Los días libres no cuentan ni restan.
 
 /**
- * Los cinco huevos. Cuanto más difícil, más días buenos hacen falta y más exigente es lo que cuenta como bueno
- * (`umbral` = % del día que hay que cumplir). Los nombres no dicen qué hay dentro.
+ * Los cinco huevos, cada vez más exigentes. Un día es «bueno» para un huevo cuando se cumple TODO esto:
+ *  · `umbral`: el % de lo planificado que hay que cumplir ese día;
+ *  · `puntos`: cuántas cosas hay que hacer (cada objetivo distinto, hábito o tarea hecha suma 1);
+ *  · `habitos`: cuántos de esos puntos tienen que ser hábitos.
+ * Con un solo objetivo solo se llega al primer huevo: los demás obligan a sumar hábitos y tareas.
+ * Los nombres no dicen qué hay dentro.
  */
 export const HUEVOS = [
-  { id: 'ascua', nombre: 'Ascua', dificultad: 1, requisito: 7, umbral: 50, frase: 'Tibio y tranquilo. Perfecto para empezar.' },
-  { id: 'rocio', nombre: 'Rocío', dificultad: 2, requisito: 14, umbral: 60, frase: 'Húmedo y brillante. Le gusta la constancia suave.' },
-  { id: 'niebla', nombre: 'Niebla', dificultad: 3, requisito: 21, umbral: 65, frase: 'Frío y callado. Tarda en abrirse, pero merece la pena.' },
-  { id: 'eclipse', nombre: 'Eclipse', dificultad: 4, requisito: 30, umbral: 75, frase: 'Oscuro y exigente. Solo responde a los días buenos.' },
-  { id: 'aurora', nombre: 'Aurora', dificultad: 5, requisito: 45, umbral: 80, frase: 'Una leyenda. Lo pide casi todo y lo devuelve con creces.' },
+  { id: 'ascua', nombre: 'Ascua', dificultad: 1, requisito: 7, umbral: 50, puntos: 1, habitos: 0, frase: 'Tibio y tranquilo. Perfecto para empezar.' },
+  { id: 'rocio', nombre: 'Rocío', dificultad: 2, requisito: 14, umbral: 60, puntos: 2, habitos: 0, frase: 'Húmedo y brillante. Le gusta la constancia suave.' },
+  { id: 'niebla', nombre: 'Niebla', dificultad: 3, requisito: 21, umbral: 65, puntos: 3, habitos: 1, frase: 'Frío y callado. Tarda en abrirse, pero merece la pena.' },
+  { id: 'eclipse', nombre: 'Eclipse', dificultad: 4, requisito: 30, umbral: 75, puntos: 4, habitos: 2, frase: 'Oscuro y exigente. Solo responde a los días buenos.' },
+  { id: 'aurora', nombre: 'Aurora', dificultad: 5, requisito: 45, umbral: 80, puntos: 5, habitos: 2, frase: 'Una leyenda. Lo pide casi todo y lo devuelve con creces.' },
 ];
 export const huevoPorId = id => HUEVOS.find(h => h.id === id);
 
 const redondear = n => Math.round(n * 100) / 100;
 
+/** Lo que hay que hacer cada día para calentar este huevo, en una frase. */
+export function retoTexto(def) {
+  const cosas = def.puntos === 1 ? 'Haz al menos 1 objetivo' : `Haz ${def.puntos} cosas (objetivos distintos, hábitos o tareas)`;
+  const habitos = def.habitos ? `, de ellas ${def.habitos} ${def.habitos === 1 ? 'hábito' : 'hábitos'}` : '';
+  return `${cosas}${habitos}, y cumple al menos el ${def.umbral} % de lo planificado.`;
+}
+
 /**
- * Calor acumulado a partir del % cumplido de cada día (la salida de progresoDiario).
- *  · día bueno (≥ umbral): +1, y +0,25 por cada día bueno seguido (hasta +1 extra: una buena racha da el doble).
- *  · día flojo (< umbral): −0,5 (nunca baja de 0). El día de hoy no resta hasta que acaba.
- *  · sin nada planificado o día libre (pct nulo): no cuenta.
+ * Lo que has hecho cada día, para medir los retos. Cada objetivo distinto, hábito o tarea hecha suma 1 punto
+ * (un mismo objetivo cuenta una sola vez al día; las tareas, hasta 2). Levantarte (+0,25) y trabajar o estudiar (+0,5)
+ * suman solos un poco, porque se dan por hechos, pero no cuentan como «acción» y no bastan por sí mismos.
+ * Un día libre no suma lo básico.
  */
-export function calorHuevo(serie, { umbral, hoy }) {
-  let calor = 0, racha = 0, buenos = 0, malos = 0;
+export function enriquecerSerie(serie, { blocks = [], habits = [], tasks = [], goals = [], libres = {}, compDe = () => [] }) {
+  const goalsHabito = new Set(goals.filter(g => g.esHabito).map(g => g.id));
+  return serie.map(d => {
+    const hechos = blocks.filter(b => b.fecha === d.fecha && b.hecho);
+    const objetivos = new Set(hechos.filter(b => !goalsHabito.has(b.goalId)).map(b => b.goalId || (b.extra ? 'extra' : 'manual'))).size;
+    const nHabitos = habits.filter(x => (x.registros || []).includes(d.fecha)).length;
+    const tareas = Math.min(2, tasks.filter(t => t.hecho && t.hechoEn === d.fecha).length);
+    const comp = libres[d.fecha] ? [] : compDe(d.fecha);
+    const basicos = (comp.length ? 0.25 : 0) + (comp.some(c => c.tipo === 'trabajo' || c.tipo === 'estudio') ? 0.5 : 0);
+    const acciones = objetivos + nHabitos + tareas;
+    return { ...d, objetivos, habitos: nHabitos, tareas, basicos, acciones, puntos: acciones + basicos };
+  });
+}
+
+/**
+ * Calor acumulado a partir de cada día (la salida de enriquecerSerie; con solo `pct` funciona como antes).
+ *  · día bueno (cumple umbral, puntos y hábitos): +1, y +0,25 por cada día bueno seguido (hasta +1 extra).
+ *  · día a medias (cumples el % pero no los puntos o hábitos del huevo): +0,25. Calienta un poco, pero no basta.
+ *  · día flojo (< umbral): −0,5 (nunca baja de 0). El día de hoy no resta hasta que acaba.
+ *  · sin nada planificado ni hecho, o día libre: no cuenta.
+ */
+export function calorHuevo(serie, { umbral, puntos = 0, habitos = 0, hoy }) {
+  let calor = 0, racha = 0, buenos = 0, malos = 0, parciales = 0;
   for (const d of serie) {
-    if (d.pct == null) continue;
-    if (d.pct >= umbral) { racha++; buenos++; calor += 1 + Math.min(1, 0.25 * (racha - 1)); }
-    else if (d.fecha < hoy) { racha = 0; malos++; calor = Math.max(0, calor - 0.5); }
+    const detalle = d.acciones !== undefined;
+    let pct = d.pct;
+    if (pct == null && detalle && d.acciones > 0) pct = 100; // algo hecho sin nada planificado
+    if (pct == null) continue;
+    if (pct >= umbral) {
+      const cumple = !detalle || (d.acciones >= 1 && d.puntos >= puntos && d.habitos >= habitos);
+      if (cumple) { racha++; buenos++; calor += 1 + Math.min(1, 0.25 * (racha - 1)); }
+      else { parciales++; calor += 0.25; }
+    } else if (d.fecha < hoy) { racha = 0; malos++; calor = Math.max(0, calor - 0.5); }
   }
-  return { calor: redondear(calor), racha, buenos, malos };
+  return { calor: redondear(calor), racha, buenos, malos, parciales };
 }
 
 /** Cómo se ve el huevo según lo caliente que está: 0 (nada) … 4 (a punto de abrirse). */
@@ -68,11 +106,12 @@ export function humorCriatura(serie, hoy) {
 }
 
 /** Todo junto: lo que necesita la pantalla. `huevo` es lo guardado ({ id, inicio, eclosion, nombre, pico }). */
-export function estadoHuevo({ huevo, serie, hoy }) {
+export function estadoHuevo({ huevo, serie, hoy, capacidad = null }) {
   if (!huevo) return null;
   const def = huevoPorId(huevo.id);
   if (!def) return null;
-  const c = calorHuevo(serie, { umbral: def.umbral, hoy });
+  const c = calorHuevo(serie, { umbral: def.umbral, puntos: def.puntos, habitos: def.habitos, hoy });
+  const dHoy = serie.find(d => d.fecha === hoy) || null;
   const pico = Math.max(huevo.pico || 0, c.calor);
   const eclosionado = Boolean(huevo.eclosion);
   const fraccion = Math.min(1, c.calor / def.requisito);
@@ -83,6 +122,14 @@ export function estadoHuevo({ huevo, serie, hoy }) {
     etapaCriatura: etapaCriatura(pico, def.requisito),
     humor: humorCriatura(serie, hoy),
     siguiente: eclosionado ? tramoSiguiente(pico, def.requisito) : null,
+    // El reto de hoy, con lo que llevas. `capacidad` = lo que podrías hacer con lo que tienes ahora (objetivos, hábitos, tareas).
+    reto: {
+      texto: retoTexto(def), puntos: def.puntos, habitos: def.habitos, umbral: def.umbral,
+      puntosHoy: dHoy?.puntos ?? 0, accionesHoy: dHoy?.acciones ?? 0, habitosHoy: dHoy?.habitos ?? 0, basicosHoy: dHoy?.basicos ?? 0, pctHoy: dHoy?.pct ?? 0,
+      cumpleHoy: Boolean(dHoy && (dHoy.pct ?? 100) >= def.umbral && dHoy.acciones >= 1 && dHoy.puntos >= def.puntos && dHoy.habitos >= def.habitos),
+      faltanPuntos: capacidad ? Math.max(0, def.puntos - capacidad.puntos) : 0,
+      faltanHabitos: capacidad ? Math.max(0, def.habitos - capacidad.habitos) : 0,
+    },
     faltan: eclosionado ? 0 : diasHastaEclosion(c.calor, def.requisito, c.racha),
   };
 }

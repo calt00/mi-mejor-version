@@ -640,3 +640,7 @@ details summary { cursor: pointer; color: var(--accent); }
 .comp-dibujo { flex: none; width: 92px; display: grid; place-items: center; background: none; border: 0; padding: 0; cursor: pointer; }
 .comp-dibujo .huevo-svg { width: 58px; }
 .comp-dibujo .cr-svg { width: 92px; }
+
+.reto-lista { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.reto-lista li { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--text2); }
+.reto-lista li.ok { color: var(--text); }

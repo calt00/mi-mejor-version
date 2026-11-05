@@ -25,7 +25,7 @@
     import { logrosCumplidos, LOGROS } from '../js/logros.js';
     import { compromisosDelDia } from '../js/compromisos.js';
 import { rachaActual, mejorRachaDe } from '../js/rachas.js';
-    import { HUEVOS, calorHuevo, etapaHuevo, etapaCriatura, tramoSiguiente, diasHastaEclosion, humorCriatura, estadoHuevo, fraseAlTocar } from '../js/huevo.js';
+    import { HUEVOS, calorHuevo, etapaHuevo, etapaCriatura, tramoSiguiente, diasHastaEclosion, humorCriatura, estadoHuevo, fraseAlTocar, enriquecerSerie, retoTexto } from '../js/huevo.js';
     import { huevoSVG, criaturaSVG, huevoMitadesSVG, ESPECIES_IDS } from '../js/criaturas.js';
     import { opinionDiaLibre, diasLibresRecientes, bloquesDeSugerencias, rutinaPara, solapes } from '../js/diasLibres.js';
     import { dormirMin, valorarSueno, planSueno, analizarSueno, acostarObjetivo, consejosSueno, recortarFranjas, acostarAbs, valorarHorario } from '../js/sueno.js';
@@ -552,7 +552,8 @@ import { rachaActual, mejorRachaDe } from '../js/rachas.js';
 
     prueba('Huevo: cinco huevos, cada uno más difícil', () => {
       igual(HUEVOS.length, 5);
-      igual(HUEVOS.every((h, i) => i === 0 || (h.requisito > HUEVOS[i - 1].requisito && h.umbral >= HUEVOS[i - 1].umbral && h.dificultad > HUEVOS[i - 1].dificultad)), true, 'más días y más exigente');
+      igual(HUEVOS.every((h, i) => i === 0 || (h.requisito > HUEVOS[i - 1].requisito && h.umbral >= HUEVOS[i - 1].umbral && h.puntos > HUEVOS[i - 1].puntos && h.habitos >= HUEVOS[i - 1].habitos && h.dificultad > HUEVOS[i - 1].dificultad)), true, 'más días, más porcentaje, más puntos y más hábitos');
+      igual(HUEVOS[0].puntos, 1, 'el primero se cumple con un solo objetivo'); igual(HUEVOS[0].habitos, 0);
       igual(HUEVOS.map(h => h.id).join(), ESPECIES_IDS.join(), 'cada huevo tiene su criatura');
       igual(HUEVOS.some(h => /(^|[^a-záéíóúñ])(pájaro|pájaros|ave|aves|dragón|reptil|ala|alas|pluma|plumas|vuela|volar)([^a-záéíóúñ]|$)/i.test(h.nombre + ' ' + h.frase)), false, 'nada dice qué hay dentro');
     });
@@ -581,6 +582,58 @@ import { rachaActual, mejorRachaDe } from '../js/rachas.js';
       igual(nacido.eclosionado, true); igual(nacido.nombre, 'Chispa'); igual(nacido.listo, false); igual(nacido.pico, 12, 'no retrocede aunque haya días malos');
       igual(estadoHuevo({ huevo: null, serie: [], hoy: h }), null, 'sin huevo elegido');
       igual(typeof fraseAlTocar(casi, 0.3), 'string');
+    });
+
+    const dia = (pct, acciones, habitos, basicos = 0.75, fecha = '2026-11-01') => ({ fecha, pct, acciones, habitos, objetivos: acciones - habitos, tareas: 0, basicos, puntos: acciones + basicos });
+    const def = id => HUEVOS.find(h => h.id === id);
+    const calor = (id, d) => calorHuevo(d, { umbral: def(id).umbral, puntos: def(id).puntos, habitos: def(id).habitos, hoy: '2026-12-01' });
+
+    prueba('Retos: con 1 objetivo hecho se cumple el primer huevo, pero no los demás', () => {
+      const unObjetivo = [dia(100, 1, 0)];
+      igual(calor('ascua', unObjetivo).buenos, 1, 'el primer huevo: 1 objetivo basta');
+      igual(calor('rocio', unObjetivo).buenos, 0, 'el segundo pide 2 cosas'); igual(calor('rocio', unObjetivo).calor, 0.25, 'pero calienta un poquito');
+      igual(calor('niebla', unObjetivo).buenos, 0); igual(calor('eclipse', unObjetivo).buenos, 0); igual(calor('aurora', unObjetivo).buenos, 0);
+    });
+
+    prueba('Retos: los hábitos hacen falta en los huevos difíciles', () => {
+      igual(calor('rocio', [dia(100, 2, 0)]).buenos, 1, 'dos objetivos valen para el segundo');
+      igual(calor('niebla', [dia(100, 3, 0)]).buenos, 0, 'tres objetivos sin hábito no valen para el tercero');
+      igual(calor('niebla', [dia(100, 3, 1)]).buenos, 1, 'con un hábito sí');
+      igual(calor('eclipse', [dia(100, 4, 1)]).buenos, 0, 'el cuarto pide 2 hábitos');
+      igual(calor('eclipse', [dia(100, 4, 2)]).buenos, 1);
+      igual(calor('aurora', [dia(85, 5, 2)]).buenos, 1); igual(calor('aurora', [dia(75, 5, 2)]).calor, 0, 'y el 80 %: con 75 % es un día flojo, no suma');
+    });
+
+    prueba('Retos: lo básico (levantarte, trabajar) suma poco y nunca basta solo', () => {
+      igual(calor('ascua', [dia(null, 0, 0, 0.75)]).calor, 0, 'sin hacer nada tuyo no cuenta, aunque trabajes y te levantes');
+      igual(calor('ascua', [dia(100, 0, 0, 0.75)]).buenos, 0, 'ni siquiera con 100 % si no hay ninguna acción');
+      igual(calor('rocio', [dia(100, 1, 0, 0.75)]).buenos, 0, '1 acción + lo básico (1,75 puntos) no llega a 2');
+      igual(calor('rocio', [dia(100, 2, 0, 0)]).buenos, 1);
+      igual(calor('ascua', [dia(null, 1, 1, 0)]).buenos, 1, 'un hábito hecho en un día sin nada planificado cuenta');
+    });
+
+    prueba('Retos: enriquecer la serie cuenta objetivos distintos, hábitos, tareas y lo básico', () => {
+      const f = '2026-11-02';
+      const goals = [{ id: 'A' }, { id: 'B' }, { id: 'H', esHabito: true }];
+      const blocks = [{ fecha: f, hecho: true, goalId: 'A' }, { fecha: f, hecho: true, goalId: 'A' }, { fecha: f, hecho: true, goalId: 'B' }, { fecha: f, hecho: true, goalId: 'H' }, { fecha: f, hecho: false, goalId: 'B' }];
+      const habits = [{ id: 'h1', registros: [f] }, { id: 'h2', registros: [] }];
+      const tasks = [1, 2, 3].map(i => ({ hecho: true, hechoEn: f }));
+      const compDe = () => [{ tipo: 'despertar' }, { tipo: 'trabajo' }];
+      const [d] = enriquecerSerie([{ fecha: f, pct: 100 }], { blocks, habits, tasks, goals, compDe });
+      igual(d.objetivos, 2, 'A y B (A dos veces cuenta una; el bloque de hábito no cuenta como objetivo)'); igual(d.habitos, 1); igual(d.tareas, 2, 'tareas: tope de 2');
+      igual(d.basicos, 0.75); igual(d.acciones, 5); igual(d.puntos, 5.75);
+      const [l] = enriquecerSerie([{ fecha: f, pct: null }], { blocks, habits, tasks, goals, compDe, libres: { [f]: { modo: 'libre' } } });
+      igual(l.basicos, 0, 'un día libre no suma lo básico');
+    });
+
+    prueba('Retos: el texto del reto y el estado de hoy', () => {
+      igual(retoTexto(def('ascua')), 'Haz al menos 1 objetivo, y cumple al menos el 50 % de lo planificado.');
+      igual(retoTexto(def('niebla')).includes('3 cosas') && retoTexto(def('niebla')).includes('1 hábito'), true);
+      igual(retoTexto(def('aurora')).includes('2 hábitos'), true);
+      const huevo = { id: 'niebla', inicio: '2026-11-01', eclosion: null, nombre: '', pico: 0 };
+      const e = estadoHuevo({ huevo, serie: [dia(100, 3, 1, 0.75, '2026-11-05')], hoy: '2026-11-05', capacidad: { puntos: 1, habitos: 0 } });
+      igual(e.reto.cumpleHoy, true); igual(e.reto.puntosHoy, 3.75);
+      igual(e.reto.faltanPuntos, 2, 'con 1 objetivo y sin hábitos faltan 2 cosas'); igual(e.reto.faltanHabitos, 1);
     });
 
     prueba('Dibujos: huevos y criaturas de las 5 especies se generan', () => {

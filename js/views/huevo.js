@@ -1,8 +1,9 @@
 // Pantallas de tu huevo y tu compañero: el círculo de «Hoy», elegir huevo, el detalle y la eclosión con su nombre.
 import { db, kvGet, kvSet } from '../db.js';
 import { esc, sheet, toast, refrescar, hoyISO, fmtFecha } from '../util.js';
-import { HUEVOS, huevoPorId, fraseAlTocar, estadoHuevo, etapaCriatura } from '../huevo.js';
+import { HUEVOS, huevoPorId, fraseAlTocar, estadoHuevo, etapaCriatura, retoTexto, enriquecerSerie } from '../huevo.js';
 import { progresoDiario } from '../progreso.js';
+import { compromisosDelDia } from '../compromisos.js';
 import { huevoSVG, huevoMisterioSVG, huevoMitadesSVG, criaturaSVG } from '../criaturas.js';
 
 export const getHuevo = () => kvGet('huevo', null);
@@ -66,14 +67,16 @@ export function conectarHuevo(root, estado) {
 export async function abrirElegirHuevo() {
   const actual = await getHuevo();
   const { el, close } = sheet('🥚 Elige tu huevo', `
-    <p class="sub">Cada día que cumplas lo suficiente, lo calentarás. Cuanto más difícil, más tardará en abrirse… y más especial será lo que salga. No te diré qué hay dentro.</p>
+    <p class="sub">Cada día que cumplas su reto, lo calentarás. Cuanto más difícil, más pide cada día y más tardará en abrirse… y más especial será lo que salga. No te diré qué hay dentro.</p>
+    <div class="nota">💡 Con un solo objetivo llegas al primer huevo. Para los demás hará falta sumar <b>hábitos</b> y más objetivos o tareas.</div>
     ${actual ? `<div class="aviso">${actual.eclosion ? 'Tu compañero actual pasará a «Tus compañeros» con la etapa que tenga, y empiezas de cero con el nuevo huevo.' : 'Si eliges otro huevo, empiezas de cero con él.'}</div>` : ''}
     <div class="huevos-lista">${HUEVOS.map(h => `
       <button type="button" class="huevo-opcion" data-elegir="${h.id}">
         <div class="hv">${huevoSVG(h.id, 0)}</div>
         <div class="datos"><b>${esc(h.nombre)}</b>
           <div class="mini">Dificultad ${estrellas(h.dificultad)}</div>
-          <div class="mini">Se abre tras unos <b>${h.requisito} días buenos</b> (cumpliendo al menos el ${h.umbral} % del día).</div>
+          <div class="mini">Se abre tras unos <b>${h.requisito} días buenos</b>.</div>
+          <div class="mini">🎯 <b>Cada día:</b> ${esc(retoTexto(h))}</div>
           <div class="mini" style="margin-top:4px"><em>${esc(h.frase)}</em></div></div></button>`).join('')}</div>`);
   el.querySelectorAll('[data-elegir]').forEach(b => b.addEventListener('click', () => confirmarElegir(b.dataset.elegir, close)));
 }
@@ -82,7 +85,8 @@ function confirmarElegir(id, cerrarLista) {
   const h = huevoPorId(id);
   const { el, close } = sheet(`¿Empezar con ${h.nombre}?`, `
     <div class="centro">${huevoSVG(h.id, 0).replace('huevo-svg', 'huevo-svg grande')}</div>
-    <p class="sub centro">Empiezas hoy. Se abrirá tras unos <b>${h.requisito} días buenos</b>, cumpliendo al menos el <b>${h.umbral} %</b> de tu día. Los días libres no cuentan ni te restan.</p>
+    <p class="sub centro">Empiezas hoy. Se abrirá tras unos <b>${h.requisito} días buenos</b>.</p>
+    <div class="nota"><b>🎯 Cada día:</b> ${esc(retoTexto(h))}<br><span class="mini">Levantarte, trabajar o estudiar suman un poco solos, pero no bastan. Los días libres no cuentan ni te restan.</span></div>
     <div class="acciones"><button class="btn gris" id="no">Volver</button><button class="btn" id="si">🥚 Empezar con este huevo</button></div>`);
   el.querySelector('#no').addEventListener('click', close);
   el.querySelector('#si').addEventListener('click', async () => {
@@ -121,12 +125,23 @@ export async function abrirHuevo(estado) {
         <div><b>${estado.buenos}</b><span class="mini">días buenos</span></div>
         <div><b>${estado.racha}</b><span class="mini">racha</span></div>
         <div><b>${estado.malos}</b><span class="mini">días flojos</span></div></div>
-      <div class="nota"><b>Cómo se calienta:</b> cada día que cumples el <b>${def.umbral} %</b> o más suma 1 de calor, y si encadenas días buenos suma hasta el doble. Un día flojo lo enfría medio punto. Los días libres no cuentan ni restan.</div>
+      <div class="card"><b>🎯 Reto de cada día</b>
+        <div class="mini" style="margin:4px 0 8px">${esc(estado.reto.texto)}</div>
+        <ul class="reto-lista">
+          <li class="${estado.reto.puntosHoy >= def.puntos ? 'ok' : ''}"><span>${estado.reto.puntosHoy >= def.puntos ? '✅' : '⬜'}</span>Puntos de hoy: <b>${num(estado.reto.puntosHoy)}</b> de ${def.puntos}</li>
+          ${def.habitos ? `<li class="${estado.reto.habitosHoy >= def.habitos ? 'ok' : ''}"><span>${estado.reto.habitosHoy >= def.habitos ? '✅' : '⬜'}</span>Hábitos de hoy: <b>${estado.reto.habitosHoy}</b> de ${def.habitos}</li>` : ''}
+          <li class="${estado.reto.pctHoy >= def.umbral ? 'ok' : ''}"><span>${estado.reto.pctHoy >= def.umbral ? '✅' : '⬜'}</span>Cumplido de hoy: <b>${estado.reto.pctHoy} %</b> (mínimo ${def.umbral} %)</li>
+        </ul>
+        <div class="mini">Levantarte, trabajar o estudiar suman un poco solos${estado.reto.basicosHoy ? ` (hoy +${num(estado.reto.basicosHoy)})` : ''}, pero no bastan: hace falta algo tuyo.</div>
+        ${estado.reto.faltanPuntos || estado.reto.faltanHabitos ? `<div class="aviso" style="margin:10px 0 0">Con lo que tienes ahora <b>no llegas a este reto</b>: ${estado.reto.faltanPuntos ? `te faltan ${estado.reto.faltanPuntos} ${estado.reto.faltanPuntos === 1 ? 'cosa' : 'cosas'} que hacer al día` : ''}${estado.reto.faltanPuntos && estado.reto.faltanHabitos ? ' y ' : ''}${estado.reto.faltanHabitos ? `${estado.reto.faltanHabitos} ${estado.reto.faltanHabitos === 1 ? 'hábito' : 'hábitos'}` : ''}. Añádelos en <a href="#objetivos" id="ir-objetivos">Objetivos</a> (hábitos, objetivos o tareas).</div>` : ''}
+        ${estado.reto.cumpleHoy ? '<div class="nota" style="margin-top:10px">🔥 ¡Hoy has cumplido su reto! El huevo se está calentando.</div>' : ''}</div>
+      <div class="nota"><b>Cómo se calienta:</b> un día que cumples el reto suma 1 de calor (hasta 2 si encadenas días buenos). Si cumples el % pero te quedas corto de puntos o hábitos, suma solo 0,25. Un día flojo lo enfría medio punto. Los días libres no cuentan ni restan.</div>
       <div class="acciones"><button class="btn gris chico" id="cambiar">Cambiar de huevo</button></div>`;
   const coleccion = (huevo.coleccion || []).length ? `<h3 style="margin:18px 4px 8px">Tus compañeros</h3><div class="coleccion">${huevo.coleccion.map(c => `<div class="col-item">${criaturaSVG(c.id, c.etapa || 3, 'feliz')}<b>${esc(c.nombre || 'Sin nombre')}</b></div>`).join('')}</div>` : '';
   const { el, close } = sheet(estado.eclosionado ? '🌟 Tu compañero' : '🥚 Tu huevo', `<div class="huevo-escena" id="escena">${dibujo}</div>${cuerpo}${coleccion}`);
   const escena = el.querySelector('#escena');
   escena.addEventListener('click', () => reaccionar(escena, estado));
+  el.querySelector('#ir-objetivos')?.addEventListener('click', close);
   el.querySelector('#cambiar')?.addEventListener('click', () => { if (confirm('Si cambias de huevo, empiezas de cero con el nuevo. ¿Seguro?')) { close(); abrirElegirHuevo(); } });
   el.querySelector('#otro')?.addEventListener('click', () => { close(); abrirElegirHuevo(); });
   el.querySelector('#renombrar')?.addEventListener('click', () => { close(); pedirNombre(estado, { tituloCorto: true }); });
@@ -217,14 +232,33 @@ export async function comprobarEclosion(estado) {
 }
 
 // ---------------------------------------------------------------------------------------------------
+/**
+ * Calcula el estado del huevo con todo lo que ha pasado desde que se eligió. Lo usan «Hoy» (que ya tiene los datos)
+ * y «Perfil» (que los carga con cargarEstadoHuevo).
+ */
+export function calcularEstadoHuevo({ huevo, blocks, habits, tasks, goals, inicioApp, libres, compDe, hoy = hoyISO() }) {
+  if (!huevo) return null;
+  const base = progresoDiario({ blocks, habits, tasks, desde: huevo.inicio, hasta: hoy, inicioApp, libres });
+  const serie = enriquecerSerie(base, { blocks, habits, tasks, goals, libres, compDe });
+  // Lo que podrías hacer al día con lo que tienes ahora: un punto por objetivo activo, hábito y (hasta 2) tarea pendiente.
+  const capacidad = {
+    puntos: goals.filter(g => !g.archivado && !g.esHabito).length + habits.length + Math.min(2, tasks.filter(t => !t.hecho).length),
+    habitos: habits.length,
+  };
+  return estadoHuevo({ huevo, serie, hoy, capacidad });
+}
+
 /** Carga el huevo y calcula su estado actual (para «Perfil», fuera de «Hoy»). */
 export async function cargarEstadoHuevo() {
   const huevo = await getHuevo();
   if (!huevo) return { huevo: null, estado: null };
   const hoy = hoyISO();
-  const [blocks, habits, tasks, inicioApp, libres] = await Promise.all([db.all('blocks'), db.all('habits'), db.all('tasks'), kvGet('inicioApp', hoy), kvGet('diasLibres', {})]);
-  const serie = progresoDiario({ blocks, habits, tasks, desde: huevo.inicio, hasta: hoy, inicioApp, libres });
-  return { huevo, estado: estadoHuevo({ huevo, serie, hoy }) };
+  const [blocks, habits, tasks, goals, inicioApp, libres, config, turnos, plan] = await Promise.all([
+    db.all('blocks'), db.all('habits'), db.all('tasks'), db.all('goals'), kvGet('inicioApp', hoy), kvGet('diasLibres', {}),
+    kvGet('configuracion'), kvGet('turnos'), kvGet('planSueno'),
+  ]);
+  const compDe = fecha => compromisosDelDia({ config, turnos, fecha, libres, plan });
+  return { huevo, estado: calcularEstadoHuevo({ huevo, blocks, habits, tasks, goals, inicioApp, libres, compDe, hoy }) };
 }
 
 /** Tarjeta de «Perfil»: tu huevo o compañero, y todo lo que se puede hacer con él. */

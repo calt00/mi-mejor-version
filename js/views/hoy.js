@@ -11,8 +11,7 @@ import { comprobarLogros } from '../logros.js';
 import { abrirRevision, abrirRevisionDiaria } from './revision.js';
 import { exportar } from './perfil.js';
 import { filaHabitosHTML, conectarFilaHabitos } from './habitos.js';
-import { huevoCentroHTML, conectarHuevo, comprobarEclosion, getHuevo, aplicarReaccion } from './huevo.js';
-import { estadoHuevo } from '../huevo.js';
+import { huevoCentroHTML, conectarHuevo, comprobarEclosion, getHuevo, aplicarReaccion, calcularEstadoHuevo } from './huevo.js';
 
 const DIAS_ENTRE_COPIAS = 7;
 
@@ -57,8 +56,7 @@ export async function render(root) {
   const extras = deHoy.filter(b => b.extra);
   const pct = descansando ? (extras.length ? Math.round(extras.filter(b => b.hecho).length / extras.length * 100) : 0) : dia.pct ?? 0;
   // Tu huevo (o tu compañero): se calienta con los días buenos desde que lo elegiste.
-  const serieHuevo = huevo ? progresoDiario({ blocks, habits, tasks, desde: huevo.inicio, hasta: hoy, inicioApp, libres: comp.libres }) : [];
-  const estadoH = estadoHuevo({ huevo, serie: serieHuevo, hoy });
+  const estadoH = calcularEstadoHuevo({ huevo, blocks, habits, tasks, goals, inicioApp, libres: comp.libres, compDe: comp.de, hoy });
   const actual = deHoy.find(b => momentoBloque(b) === 'ahora' && !b.hecho);
   const siguiente = deHoy.find(b => momentoBloque(b) === 'futuro' && !b.hecho);
 
