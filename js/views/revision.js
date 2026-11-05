@@ -1,9 +1,10 @@
-// Revisión semanal: números de la semana + resumen y 3 ideas (calculadas por la app, sin IA). Se guarda en el historial.
+// Revisiones: la de cada noche (qué salió bien y qué no) y la semanal (números + 3 ideas). Calculadas por la app, sin IA.
 import { db, kvGet, kvSet } from '../db.js';
-import { esc, sheet, fmtFecha, fmtEur, miniMarkdown, hoyISO } from '../util.js';
-import { resumenSemana, ideasSemana } from '../progreso.js';
+import { esc, sheet, fmtFecha, fmtEur, miniMarkdown, hoyISO, weekStart, weekday, refrescar } from '../util.js';
+import { resumenSemana, ideasSemana, resumenDia, ideasDia } from '../progreso.js';
 
 const MAX_REVISIONES = 52;
+const MAX_REVISIONES_DIA = 60;
 
 async function datosSemana() {
   const [goals, blocks, habits, tasks, expenses, contributions, inicioApp] = await Promise.all([
@@ -59,4 +60,52 @@ export async function abrirRevision(lunes) {
   const rev = { semana: lunes, fecha: hoyISO(), ...guardada, numeros: n, ...ideasSemana(n) };
   await guardar(rev);
   sheet(`Tu semana · ${fechaCorta(n.lunes)} – ${fechaCorta(n.domingo)}`, `${numerosHTML(n)}${ideasHTML(rev)}`);
+}
+
+const lista = (items, vacio) => items.length ? `<ul class="lista">${items.join('')}</ul>` : `<p class="sub" style="margin:4px 0">${vacio}</p>`;
+
+function diaHTML(n, r) {
+  const bien = [
+    ...n.bien.bloques.map(t => `<li><span>✅</span><div class="grow">${esc(t)}</div></li>`),
+    ...n.bien.habitos.map(h => `<li><span>${esc(h.emoji || '✨')}</span><div class="grow">${esc(h.titulo)}</div></li>`),
+    ...(n.bien.tareas ? [`<li><span>☑️</span><div class="grow">${n.bien.tareas} ${n.bien.tareas === 1 ? 'tarea completada' : 'tareas completadas'}</div></li>`] : []),
+  ];
+  const mal = [
+    ...n.mal.bloques.map(b => `<li><span>${b.importante ? '⏰' : '⬜'}</span><div class="grow">${esc(b.titulo)}</div></li>`),
+    ...n.mal.habitos.map(h => `<li><span>${esc(h.emoji || '✨')}</span><div class="grow">${esc(h.titulo)} <span class="mini">sin marcar</span></div></li>`),
+  ];
+  return `
+    <div class="card"><div class="fila">
+      <div class="anillo" style="--p:${n.pct ?? 0}"><span>${n.pct ?? '–'}${n.pct != null ? '%' : ''}</span></div>
+      <div class="grow" style="flex:1">${esc(r.texto)}</div></div></div>
+    <div class="seccion"><h2>👍 Lo que has hecho bien</h2></div>
+    <div class="card plano">${lista(bien, 'Hoy no marcaste nada como hecho.')}</div>
+    <div class="seccion"><h2>🔧 Lo que mejorar</h2></div>
+    <div class="card plano">${lista(mal, '¡Nada pendiente! 🎉')}</div>
+    ${n.gastado || n.ahorrado ? `<div class="grid2" style="margin-bottom:12px">
+      <div class="card" style="margin:0;text-align:center"><div class="mini">💸 Gastado hoy</div><b>${fmtEur(n.gastado)}</b></div>
+      <div class="card" style="margin:0;text-align:center"><div class="mini">🐷 Ahorrado hoy</div><b>${fmtEur(n.ahorrado)}</b></div></div>` : ''}
+    <div class="card"><b>🌙 Para mañana</b>
+      <ol style="padding-left:20px;margin:8px 0 0">${r.consejos.map(i => `<li style="margin-bottom:10px"><b>${esc(i.titulo)}</b><br><span class="sub">${esc(i.detalle)}</span></li>`).join('')}</ol></div>`;
+}
+
+/** Abre (y guarda) la revisión de la noche del día `fecha`. En domingo ofrece seguir con la semanal. */
+export async function abrirRevisionDiaria(fecha = hoyISO()) {
+  const [goals, blocks, habits, tasks, expenses, contributions, inicioApp, guardadas] = await Promise.all([
+    db.all('goals'), db.all('blocks'), db.all('habits'), db.all('tasks'), db.all('expenses'), db.all('contributions'),
+    kvGet('inicioApp', fecha), kvGet('revisionesDia', []),
+  ]);
+  const n = resumenDia({ goals, blocks, habits, tasks, expenses, contributions, inicioApp }, fecha);
+  const r = ideasDia(n);
+  const historial = guardadas.filter(x => x.fecha !== fecha);
+  historial.push({ fecha, pct: n.pct, texto: r.texto });
+  historial.sort((a, b) => a.fecha.localeCompare(b.fecha));
+  await kvSet('revisionesDia', historial.slice(-MAX_REVISIONES_DIA));
+
+  const domingo = weekday(fecha) === 6;
+  const { el, close } = sheet(`Tu día · ${fmtFecha(fecha, { weekday: 'long', day: 'numeric', month: 'short' })}`, `${diaHTML(n, r)}
+    <div class="acciones">${domingo ? '<button class="btn" id="ver-semana">📋 Ver mi semana</button>' : ''}<button class="btn ${domingo ? 'gris' : ''}" id="buenas-noches">Buenas noches 🌙</button></div>`,
+    { onClose: refrescar });
+  el.querySelector('#buenas-noches').addEventListener('click', close);
+  el.querySelector('#ver-semana')?.addEventListener('click', () => { close(); abrirRevision(weekStart(fecha)); });
 }

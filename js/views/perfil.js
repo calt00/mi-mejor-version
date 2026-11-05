@@ -46,6 +46,7 @@ export async function render(root) {
       <div class="acciones" style="margin-top:0">
         <button class="btn sec chico" data-guia="atajo-recordatorios">⏰ Recordatorios y alarmas</button>
         <button class="btn sec chico" data-guia="acceso-rapido">📱 Acceso rápido</button>
+        <button class="btn sec chico" data-guia="revision-nocturna">🌙 Revisión nocturna</button>
         <button class="btn sec chico" id="bienvenida">👋 Repetir bienvenida</button>
       </div>
     </div>
@@ -102,7 +103,7 @@ export async function render(root) {
 }
 
 export async function abrirGuia(nombre) {
-  const titulos = { 'atajo-recordatorios': 'Recordatorios y alarmas', 'acceso-rapido': 'Acceso rápido' };
+  const titulos = { 'atajo-recordatorios': 'Recordatorios y alarmas', 'acceso-rapido': 'Acceso rápido', 'revision-nocturna': 'Revisión nocturna' };
   const { el } = sheet(titulos[nombre] || 'Guía', '<div class="cargando"><span class="spinner"></span></div>');
   try {
     const res = await fetch(`docs/${nombre}.md`);

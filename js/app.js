@@ -1,5 +1,5 @@
 // Arranque de la app: navegación por pestañas, tema y modo sin conexión.
-import { $, $$, hoyISO } from './util.js';
+import { $, $$, hoyISO, nowMin } from './util.js';
 import { db, kvGet, kvSet, pedirPersistencia } from './db.js';
 import { getSettings, getProfile } from './datos.js';
 import * as hoy from './views/hoy.js';
@@ -11,6 +11,8 @@ import * as perfil from './views/perfil.js';
 import * as progreso from './views/progreso.js';
 import { mostrarBienvenida } from './views/bienvenida.js';
 import { retomarFoco } from './views/foco.js';
+import { abrirRevisionDiaria } from './views/revision.js';
+import { diaPendiente } from './progreso.js';
 
 const RUTAS = {
   hoy: { titulo: 'Hoy', vista: hoy },
@@ -56,6 +58,15 @@ export async function aplicarTema() {
   else delete document.documentElement.dataset.tema;
 }
 
+// De noche, al abrir la app (p. ej. con la automatización de Atajos), salta sola la revisión del día. Una vez por día.
+async function revisarNoche() {
+  const hoy = hoyISO();
+  if (document.querySelector('.sheet-back, .foco, .bienvenida')) return;
+  if (!diaPendiente(hoy, nowMin(), await kvGet('revisionesDia', [])) || (await kvGet('revisionAvisada')) === hoy) return;
+  await kvSet('revisionAvisada', hoy);
+  abrirRevisionDiaria(hoy);
+}
+
 async function iniciar() {
   if (!(await kvGet('inicioApp'))) await kvSet('inicioApp', hoyISO());
   await aplicarTema();
@@ -68,11 +79,11 @@ async function iniciar() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { oculto = Date.now(); return; }
     registroSW?.update().catch(() => {});
-    if (Date.now() - oculto > 60_000 && !document.querySelector('.sheet-back, .foco, .bienvenida')) render();
+    if (Date.now() - oculto > 60_000 && !document.querySelector('.sheet-back, .foco, .bienvenida')) render().then(revisarNoche);
   });
   await render();
   if (!(await kvGet('bienvenidaHecha')) && !(await db.all('goals')).length) mostrarBienvenida();
-  else retomarFoco();
+  else { await retomarFoco(); await revisarNoche(); }
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     // Si ya había una versión instalada y entra otra, se avisa para recargar.
     const habiaVersion = Boolean(navigator.serviceWorker.controller);

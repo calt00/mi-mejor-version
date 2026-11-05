@@ -112,6 +112,59 @@ export function ideasSemana(n) {
   return { texto: l.join(' '), ideas: ideas.slice(0, 3) };
 }
 
+/** Hora (en minutos) a partir de la cual toca la revisión de la noche. */
+export const HORA_REVISION = 20 * 60;
+
+/** Números de un día para la revisión nocturna: qué salió bien y qué quedó sin hacer. */
+export function resumenDia(d, fecha) {
+  const bs = d.blocks.filter(b => b.fecha === fecha).sort((a, b) => a.inicio.localeCompare(b.inicio));
+  const activos = d.habits.filter(h => inicioHabito(h, d.inicioApp) <= fecha);
+  const dia = progresoDiario({ ...d, desde: fecha, hasta: fecha })[0];
+  const horas = d.goals.map(g => ({ titulo: g.titulo, min: sum(bs.filter(b => b.goalId === g.id && b.hecho), minutos) })).filter(x => x.min);
+  const tareas = d.tasks.filter(t => t.hecho && t.hechoEn === fecha).length;
+  return {
+    fecha, pct: dia.pct,
+    bien: {
+      bloques: bs.filter(b => b.hecho).map(b => b.titulo),
+      habitos: activos.filter(h => h.registros.includes(fecha)).map(h => ({ titulo: h.titulo, emoji: h.emoji })),
+      tareas, horas,
+    },
+    mal: {
+      bloques: bs.filter(b => !b.hecho).map(b => ({ titulo: b.titulo, importante: Boolean(b.importante) })),
+      habitos: activos.filter(h => !h.registros.includes(fecha)).map(h => ({ titulo: h.titulo, emoji: h.emoji })),
+    },
+    gastado: +sum((d.expenses || []).filter(e => e.fecha === fecha), e => e.importe).toFixed(2),
+    ahorrado: +sum((d.contributions || []).filter(c => c.fecha === fecha), c => c.importe).toFixed(2),
+    bloquesManana: d.blocks.filter(b => b.fecha === addDays(fecha, 1)).length,
+  };
+}
+
+/** Resumen y hasta 2 consejos para mañana a partir de resumenDia() (sin IA). */
+export function ideasDia(n) {
+  const nada = !n.bien.bloques.length && !n.mal.bloques.length && !n.bien.habitos.length && !n.mal.habitos.length && !n.bien.tareas;
+  let texto;
+  if (n.pct == null || nada) texto = 'Hoy no tenías nada planificado. Un día libre también cuenta. 😌';
+  else if (n.pct >= 80) texto = `Hoy has cumplido el ${n.pct} % de lo planificado. ¡Gran día! 🌟`;
+  else if (n.pct >= 50) texto = `Hoy has cumplido el ${n.pct} % de lo planificado. Buen ritmo, sigue así. 💪`;
+  else texto = `Hoy has cumplido el ${n.pct} % de lo planificado. No pasa nada: mañana es una página en blanco. 🌱`;
+
+  const c = [];
+  const importantes = n.mal.bloques.filter(b => b.importante);
+  if (importantes.length) c.push({ titulo: `Dale prioridad a «${importantes[0].titulo}»`, detalle: 'Era importante y se quedó sin hacer. Muévelo a mañana a primera hora, antes de que el día se complique.' });
+  else if (n.mal.bloques.length >= 3) c.push({ titulo: 'Planifica menos, cumple más', detalle: `Se quedaron ${n.mal.bloques.length} bloques sin hacer. Mañana deja solo lo imprescindible: mejor 2 bloques hechos que 5 a medias.` });
+  else if (n.mal.bloques.length) c.push({ titulo: `Retoma «${n.mal.bloques[0].titulo}»`, detalle: 'Se quedó pendiente. Si sigue siendo importante, ponlo mañana en un hueco concreto.' });
+  if (n.mal.habitos.length) c.push({ titulo: `No rompas la racha de «${n.mal.habitos[0].titulo}»`, detalle: 'Hoy no lo marcaste. Si aún estás a tiempo, hazlo ahora aunque sea en versión mínima (2 minutos).' });
+  if (!n.bloquesManana) c.push({ titulo: 'Mañana no tienes nada planificado', detalle: 'Antes de dormir, añade 1 o 2 bloques. Despertar con el día decidido cuesta mucho menos.' });
+  if (n.pct != null && n.pct >= 80 && c.length < 2) c.push({ titulo: 'Repite lo que ha funcionado', detalle: 'Hoy te salió redondo. Acuéstate a una hora razonable y empieza mañana igual.' });
+  if (!c.length) c.push({ titulo: 'Descansa bien', detalle: 'Dormir bien es parte del plan: mañana rendirás mejor.' });
+  return { texto, consejos: c.slice(0, 2) };
+}
+
+/** ¿Toca hacer hoy la revisión de la noche? (a partir de las 20:00 y si aún no se hizo) */
+export function diaPendiente(hoy, ahora, revisionesDia = []) {
+  return ahora >= HORA_REVISION && !revisionesDia.some(r => r.fecha === hoy);
+}
+
 /**
  * Semana cuya revisión toca hacer hoy (su lunes), o null.
  * El domingo se revisa la semana en curso; de lunes a miércoles, la anterior si no se hizo.

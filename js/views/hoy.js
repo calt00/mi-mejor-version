@@ -1,15 +1,15 @@
 // Pantalla «Hoy»: progreso del día, asistente, bloques, hábitos y ahorro.
 import { db, kvGet, kvSet } from '../db.js';
 import { getProfile } from '../datos.js';
-import { esc, hoyISO, fmtFecha, sheet, formData, toast, refrescar, fmtEur, fmtHoras, addDays, diasEntre, opciones } from '../util.js';
+import { esc, hoyISO, fmtFecha, sheet, formData, toast, refrescar, fmtEur, fmtHoras, addDays, diasEntre, opciones, nowMin } from '../util.js';
 import { bloqueHTML, conectarBloques, abrirEditorBloque, abrirEnvioIphone, racha, datosFinanzas, momentoBloque } from './comun.js';
 import { responder, mensajeHTML, conectarMensajes } from './asistente.js';
 import { estadoMeta, recomendaciones } from '../finanzas.js';
 import { cerditoHTML } from '../cerdito.js';
-import { progresoDiario, mediaSerie, semanaPendiente } from '../progreso.js';
+import { progresoDiario, mediaSerie, semanaPendiente, diaPendiente } from '../progreso.js';
 import { barrasSVG } from '../grafica.js';
 import { comprobarLogros } from '../logros.js';
-import { abrirRevision } from './revision.js';
+import { abrirRevision, abrirRevisionDiaria } from './revision.js';
 import { abrirCalendarioHabito } from './progreso.js';
 import { exportar } from './perfil.js';
 import { abrirCatalogoHabitos, mostrarHabitoCreado, botonesMomento, frecuenciaTxt } from './habitos.js';
@@ -33,14 +33,15 @@ function saludo(nombre) {
 
 export async function render(root) {
   const hoy = hoyISO();
-  const [perfil, goals, blocks, habits, tasks, fin, revisiones, ultimaCopia, copiaPospuesta] = await Promise.all([
+  const [perfil, goals, blocks, habits, tasks, fin, revisiones, revisionesDia, ultimaCopia, copiaPospuesta] = await Promise.all([
     getProfile(), db.all('goals'), db.all('blocks'), db.all('habits'), db.all('tasks'), datosFinanzas(),
-    kvGet('revisiones', []), kvGet('ultimaCopia'), kvGet('copiaPospuesta'),
+    kvGet('revisiones', []), kvGet('revisionesDia', []), kvGet('ultimaCopia'), kvGet('copiaPospuesta'),
   ]);
   const inicioApp = fin.inicioApp || hoy;
   const semana = progresoDiario({ blocks, habits, tasks, desde: addDays(hoy, -6), hasta: hoy, inicioApp });
   const mediaSemana = mediaSerie(semana);
   const lunesRevision = semanaPendiente(hoy, revisiones, inicioApp);
+  const revisarNoche = diaPendiente(hoy, nowMin(), revisionesDia);
   const hayDatos = goals.length + blocks.length + habits.length + fin.expenses.length + fin.savingsGoals.length > 0;
   const copia = tocaCopia({ hoy, ultimaCopia, copiaPospuesta, inicioApp, hayDatos });
   const goalsById = Object.fromEntries(goals.map(g => [g.id, g]));
@@ -78,6 +79,11 @@ export async function render(root) {
         <a class="btn gris chico" href="#horario">Ver horario</a>
       </div>
     </div>
+
+    ${revisarNoche ? `<div class="card aviso-card">
+      <div class="fila"><span style="font-size:30px">🌙</span><div class="grow" style="flex:1">
+        <b>Revisa tu día</b><div class="sub">Mira qué ha salido bien, qué mejorar y prepara mañana.</div></div></div>
+      <div class="acciones"><button class="btn chico" id="revision-dia">Revisar mi día</button></div></div>` : ''}
 
     ${lunesRevision ? `<div class="card aviso-card">
       <div class="fila"><span style="font-size:30px">📋</span><div class="grow" style="flex:1">
@@ -141,6 +147,7 @@ export async function render(root) {
     if (!on) { navigator.vibrate?.(30); const r = racha(h); if (r > 1) toast(`🔥 ¡Racha de ${r} días!`); }
     refrescar();
   }));
+  root.querySelector('#revision-dia')?.addEventListener('click', () => abrirRevisionDiaria(hoy));
   root.querySelector('#revision')?.addEventListener('click', () => abrirRevision(lunesRevision).then(() => setTimeout(refrescar, 300)));
   root.querySelector('#copia')?.addEventListener('click', async () => { if (await exportar()) refrescar(); });
   root.querySelector('#copia-luego')?.addEventListener('click', async () => { await kvSet('copiaPospuesta', addDays(hoy, 2)); refrescar(); });

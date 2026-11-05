@@ -21,7 +21,7 @@
     import { etapa, escala } from '../js/cerdito.js';
     import { miniMarkdown, toMin, addDays, weekStart, hoyISO, weekday } from '../js/util.js';
     import { construirPayload } from '../js/iphone.js';
-    import { progresoDiario, mediaMovil, mejorRacha, resumenSemana, semanaPendiente, inicioHabito } from '../js/progreso.js';
+    import { progresoDiario, mediaMovil, mejorRacha, resumenSemana, semanaPendiente, inicioHabito, resumenDia, ideasDia, diaPendiente } from '../js/progreso.js';
     import { logrosCumplidos, LOGROS } from '../js/logros.js';
     import { barrasSVG, calendarioHTML } from '../js/grafica.js';
     import { normalizarPlan, cruzarConExistentes, unirFranjas, normalizarTurnos } from '../js/plan.js';
@@ -272,6 +272,29 @@
       igual(semanaPendiente('2026-11-05', [], '2026-10-01'), null, 'jueves');
       igual(semanaPendiente('2026-11-02', [{ semana: '2026-10-26' }], '2026-10-01'), null, 'ya hecha');
       igual(semanaPendiente('2026-11-02', [], '2026-11-02'), null, 'app recién instalada');
+    });
+
+    prueba('Revisión diaria: qué salió bien, qué no y consejos para mañana', () => {
+      const d = {
+        goals: [{ id: 'A', titulo: 'Inglés' }],
+        blocks: [{ ...blq('2026-10-28', true), goalId: 'A', titulo: 'Inglés' }, { ...blq('2026-10-28', false), titulo: 'Gimnasio', importante: true }, blq('2026-10-29', false)],
+        habits: [{ id: 'h', titulo: 'Agua', emoji: '💧', registros: [], creado: '2026-10-01' }],
+        tasks: [{ hecho: true, hechoEn: '2026-10-28' }], expenses: [{ importe: 5, fecha: '2026-10-28' }], contributions: [], inicioApp: '2026-10-01',
+      };
+      const n = resumenDia(d, '2026-10-28');
+      igual(n.bien.bloques.length, 1); igual(n.mal.bloques.length, 1); igual(n.mal.habitos.length, 1);
+      igual(n.bien.tareas, 1); igual(n.gastado, 5); igual(n.bloquesManana, 1);
+      const r = ideasDia(n);
+      igual(r.consejos[0].titulo, 'Dale prioridad a «Gimnasio»');
+      igual(r.consejos.length, 2);
+      igual(ideasDia(resumenDia({ ...d, blocks: [], habits: [], tasks: [], expenses: [] }, '2026-10-28')).texto.startsWith('Hoy no tenías nada'), true, 'día libre');
+    });
+
+    prueba('Revisión diaria: toca de noche y solo una vez al día', () => {
+      igual(diaPendiente('2026-10-28', 19 * 60 + 59, []), false, 'antes de las 20:00');
+      igual(diaPendiente('2026-10-28', 21 * 60, []), true, 'de noche');
+      igual(diaPendiente('2026-10-28', 21 * 60, [{ fecha: '2026-10-28' }]), false, 'ya hecha');
+      igual(diaPendiente('2026-10-28', 21 * 60, [{ fecha: '2026-10-27' }]), true, 'la de ayer no cuenta');
     });
 
     prueba('Logros: se cumplen con los datos justos', () => {
