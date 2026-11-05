@@ -5,6 +5,8 @@ import { getPrefs, savePrefs, getSettings, saveDisponibilidad, saveTurnos, dispP
 import { esc, sheet, toast, refrescar, hoyISO, addDays, weekStart, weekDates, weekday, fmtHoras, DIAS, DIAS_CORTO } from '../util.js';
 import { TIPOS_TURNO, estadoDesde, objetivoVacio, tiposActivos, libresDe, minutosLibresPorDia, sesionDe, encaje, maxHorasDiaDe, objetivosDe } from '../configuracion.js';
 import { tipoTurno } from '../interprete.js';
+import { analizarSueno, planParaGuardar, dormirMin, horasTxt as duracionTxt } from '../sueno.js';
+import { perfilSuenoHTML } from './sueno.js';
 import { generarSemana, ordenarBloques } from '../scheduler.js';
 import { asignarFrases } from '../iphone.js';
 
@@ -116,14 +118,26 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
 
     descanso() {
       const total = libresDia().reduce((a, m) => a + m, 0);
+      const turnos = e.trabaja && e.tipoHorario === 'turnos';
+      const duerme = (a, l) => `<span class="mini">😴 ${duracionTxt(dormirMin(a, l))}</span>`;
       return `
         <h2>¿A qué hora te levantas y te acuestas?</h2>
-        <p class="sub">${e.trabaja ? 'Normalmente, los días que no trabajas. Los días de trabajo lo ajusto yo a tu horario.' : 'Normalmente, un día cualquiera.'}</p>
+        <p class="sub">${turnos ? 'Con turnos no se duerme igual cada semana: dime tus horas normales en cada turno.' : e.trabaja ? 'Normalmente, los días que no trabajas. Los días de trabajo lo ajusto yo a tu horario.' : 'Normalmente, un día cualquiera.'}</p>
+        ${turnos ? tiposActivos(e).map(k => `<div class="card cfg-sub"><b>Turno de ${TURNO_TXT[k].toLowerCase()}</b>
+          <p class="mini" style="margin:2px 0 8px">${k === 'noche' ? 'Cuando duermes de día, después de salir del trabajo.' : k === 'manana' ? 'Los días que madrugas para entrar.' : 'Los días que entras por la tarde.'}</p>
+          <div class="grid2">
+            <label class="campo"><span>☀️ Me levanto</span>${hora(`suenoTurnos.${k}.levantar`, 'Me levanto')}</label>
+            <label class="campo"><span>🌙 Me acuesto</span>${hora(`suenoTurnos.${k}.acostar`, 'Me acuesto')}</label>
+          </div>${duerme(e.suenoTurnos[k].acostar, e.suenoTurnos[k].levantar)}</div>`).join('') : ''}
+        ${turnos ? '<span class="cfg-etiqueta">Y los días que no trabajas</span>' : ''}
         <div class="grid2">
           <label class="campo"><span>☀️ Me levanto</span>${hora('levantar', 'Me levanto')}</label>
           <label class="campo"><span>🌙 Me acuesto</span>${hora('acostar', 'Me acuesto')}</label>
         </div>
-        <div class="nota">🕒 Quitando ${e.trabaja ? 'el trabajo, el trayecto, ' : ''}las comidas y un rato para descansar, te quedan unas <b>${fmtHoras(total)} libres a la semana</b>${libres().turnos ? ' (en la semana de turno que menos deja)' : ''}.</div>`;
+        ${turnos ? '' : duerme(e.acostar, e.levantar)}
+        <div class="nota" style="margin-top:12px">🕒 Quitando ${e.trabaja ? 'el trabajo, el trayecto, ' : ''}las comidas y un rato para descansar, te quedan unas <b>${fmtHoras(total)} libres a la semana</b>${libres().turnos ? ' (en la semana de turno que menos deja)' : ''}.</div>
+        <span class="cfg-etiqueta">Tu sueño</span>
+        ${analizarSueno(e).map(p => perfilSuenoHTML(p)).join('')}`;
     },
 
     objetivos() {
@@ -272,6 +286,7 @@ async function guardarTodo(e) {
   await saveDisponibilidad(libres.disponibilidad);
   await saveTurnos(libres.turnos);
   await savePrefs({ ...(await getPrefs()), descansoMin: 10, maxHorasDia: maxHorasDiaDe(guardar) });
+  await kvSet('planSueno', planParaGuardar(analizarSueno(e), hoy));
   await db.putMany('goals', [...guardar, ...archivar]);
   if (tareas.length) await db.putMany('tasks', tareas);
 

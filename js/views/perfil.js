@@ -5,9 +5,11 @@ import { esc, formData, toast, refrescar, sheet, miniMarkdown, hoyISO, opciones,
 import { mostrarBienvenida } from './bienvenida.js';
 import { abrirPlan } from './plan.js';
 import { abrirConfigurador } from './configurar.js';
+import { tarjetaSuenoHTML, abrirPlanSueno } from './sueno.js';
 
 export async function render(root) {
   const [p, s, ultimaCopia, situacion] = await Promise.all([getProfile(), getSettings(), kvGet('ultimaCopia'), kvGet('miSituacion')]);
+  const suenoTarjeta = await tarjetaSuenoHTML();
   let persistente = null;
   try { persistente = await navigator.storage?.persisted?.(); } catch { /* sin soporte */ }
   const instalada = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
@@ -51,6 +53,7 @@ export async function render(root) {
       </div>
     </div>
 
+    ${suenoTarjeta}
     <div class="card">
       <h3 style="margin-bottom:6px">💾 Copia de seguridad</h3>
       <p class="mini">Tus datos están solo en este iPhone${persistente ? ' (almacenamiento protegido ✓)' : ''}. Haz una copia de vez en cuando y guárdala en Archivos o iCloud Drive.</p>
@@ -92,6 +95,7 @@ export async function render(root) {
   root.querySelectorAll('[data-guia]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); abrirGuia(b.dataset.guia); }));
   root.querySelector('#exportar').addEventListener('click', async () => { if (await exportar()) refrescar(); });
   root.querySelector('#bienvenida').addEventListener('click', mostrarBienvenida);
+  root.querySelector('#ver-sueno')?.addEventListener('click', abrirPlanSueno);
   root.querySelector('#borrar-todo').addEventListener('click', async () => {
     if (!confirm('Vas a borrar TODOS tus datos de este iPhone: objetivos, horario, hábitos, ahorro y ajustes. ¿Quieres continuar?')) return;
     if (!confirm('Última comprobación: esto no se puede deshacer. Si no has exportado una copia, cancela y hazla antes. ¿Borrar todo?')) return;

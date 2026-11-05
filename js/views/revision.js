@@ -1,7 +1,9 @@
 // Revisiones: la de cada noche (qué salió bien y qué no) y la semanal (números + 3 ideas). Calculadas por la app, sin IA.
 import { db, kvGet, kvSet } from '../db.js';
-import { esc, sheet, fmtFecha, fmtEur, miniMarkdown, hoyISO, weekStart, weekday, refrescar } from '../util.js';
+import { esc, sheet, fmtFecha, fmtEur, miniMarkdown, hoyISO, weekStart, weekday, refrescar, addDays } from '../util.js';
 import { resumenSemana, ideasSemana, resumenDia, ideasDia } from '../progreso.js';
+import { tipoTurno } from '../interprete.js';
+import { acostarObjetivo } from '../sueno.js';
 
 const MAX_REVISIONES = 52;
 const MAX_REVISIONES_DIA = 60;
@@ -64,7 +66,12 @@ export async function abrirRevision(lunes) {
 
 const lista = (items, vacio) => items.length ? `<ul class="lista">${items.join('')}</ul>` : `<p class="sub" style="margin:4px 0">${vacio}</p>`;
 
-function diaHTML(n, r) {
+function suenoHTML(s) {
+  if (!s) return '';
+  return `<div class="card"><b>😴 Esta noche</b><div class="sub" style="margin-top:4px">${s.alDia ? `Mantén tu hora: acuéstate sobre las <b>${s.acostar}</b>.` : `Acuéstate a las <b>${s.acostar}</b> (semana ${s.semana} de ${s.total} de tu plan de sueño). Pantallas fuera 30 minutos antes.`}</div></div>`;
+}
+
+function diaHTML(n, r, sueno) {
   const bien = [
     ...n.bien.bloques.map(t => `<li><span>✅</span><div class="grow">${esc(t)}</div></li>`),
     ...n.bien.habitos.map(h => `<li><span>${esc(h.emoji || '✨')}</span><div class="grow">${esc(h.titulo)}</div></li>`),
@@ -85,6 +92,7 @@ function diaHTML(n, r) {
     ${n.gastado || n.ahorrado ? `<div class="grid2" style="margin-bottom:12px">
       <div class="card" style="margin:0;text-align:center"><div class="mini">💸 Gastado hoy</div><b>${fmtEur(n.gastado)}</b></div>
       <div class="card" style="margin:0;text-align:center"><div class="mini">🐷 Ahorrado hoy</div><b>${fmtEur(n.ahorrado)}</b></div></div>` : ''}
+    ${suenoHTML(sueno)}
     <div class="card"><b>🌙 Para mañana</b>
       <ol style="padding-left:20px;margin:8px 0 0">${r.consejos.map(i => `<li style="margin-bottom:10px"><b>${esc(i.titulo)}</b><br><span class="sub">${esc(i.detalle)}</span></li>`).join('')}</ol></div>`;
 }
@@ -95,6 +103,10 @@ export async function abrirRevisionDiaria(fecha = hoyISO()) {
     db.all('goals'), db.all('blocks'), db.all('habits'), db.all('tasks'), db.all('expenses'), db.all('contributions'),
     kvGet('inicioApp', fecha), kvGet('revisionesDia', []),
   ]);
+  const [planSueno, turnos] = await Promise.all([kvGet('planSueno'), kvGet('turnos')]);
+  // La hora de acostarse depende del turno de mañana, que es el que marca cuándo toca madrugar.
+  const claveSueno = turnos ? tipoTurno(turnos, addDays(fecha, 1)) : 'general';
+  const sueno = acostarObjetivo(planSueno, claveSueno, fecha);
   const n = resumenDia({ goals, blocks, habits, tasks, expenses, contributions, inicioApp }, fecha);
   const r = ideasDia(n);
   const historial = guardadas.filter(x => x.fecha !== fecha);
@@ -103,7 +115,7 @@ export async function abrirRevisionDiaria(fecha = hoyISO()) {
   await kvSet('revisionesDia', historial.slice(-MAX_REVISIONES_DIA));
 
   const domingo = weekday(fecha) === 6;
-  const { el, close } = sheet(`Tu día · ${fmtFecha(fecha, { weekday: 'long', day: 'numeric', month: 'short' })}`, `${diaHTML(n, r)}
+  const { el, close } = sheet(`Tu día · ${fmtFecha(fecha, { weekday: 'long', day: 'numeric', month: 'short' })}`, `${diaHTML(n, r, sueno)}
     <div class="acciones">${domingo ? '<button class="btn" id="ver-semana">📋 Ver mi semana</button>' : ''}<button class="btn ${domingo ? 'gris' : ''}" id="buenas-noches">Buenas noches 🌙</button></div>`,
     { onClose: refrescar });
   el.querySelector('#buenas-noches').addEventListener('click', close);

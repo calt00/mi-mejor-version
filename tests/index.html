@@ -23,6 +23,7 @@
     import { construirPayload } from '../js/iphone.js';
     import { progresoDiario, mediaMovil, mejorRacha, resumenSemana, semanaPendiente, inicioHabito, resumenDia, ideasDia, diaPendiente } from '../js/progreso.js';
     import { logrosCumplidos, LOGROS } from '../js/logros.js';
+    import { dormirMin, valorarSueno, planSueno, analizarSueno, acostarObjetivo, consejosSueno } from '../js/sueno.js';
     import { barrasSVG, calendarioHTML } from '../js/grafica.js';
     import { normalizarPlan, cruzarConExistentes, unirFranjas, normalizarTurnos } from '../js/plan.js';
     import { interpretarTexto, tipoTurno } from '../js/interprete.js';
@@ -305,10 +306,46 @@
       igual(dia.planificados, 2, 'bloque + hábito sin hora'); igual(dia.hechos, 1); igual(dia.pct, 50);
     });
 
-    for (const vista of ['hoy', 'objetivos', 'habitos', 'configurar', 'revision', 'perfil', 'progreso', 'horario', 'ahorro', 'asistente']) {
+    for (const vista of ['hoy', 'objetivos', 'habitos', 'sueno', 'configurar', 'revision', 'perfil', 'progreso', 'horario', 'ahorro', 'asistente']) {
       try { await import(`../js/views/${vista}.js`); prueba(`La pantalla «${vista}» carga sin errores`, () => {}); }
       catch (e) { prueba(`La pantalla «${vista}» carga sin errores`, () => { throw e; }); }
     }
+
+    prueba('Sueño: duración, valoración y pasar la medianoche', () => {
+      igual(dormirMin('23:00', '07:00'), 480); igual(dormirMin('21:45', '05:00'), 435); igual(dormirMin('08:00', '15:00'), 420);
+      igual(valorarSueno(300).nivel, 'poco'); igual(valorarSueno(390).nivel, 'justo'); igual(valorarSueno(480).nivel, 'bien'); igual(valorarSueno(600).nivel, 'mucho');
+    });
+
+    prueba('Sueño: el plan adelanta 30 min por semana y mantiene la hora de levantarse', () => {
+      const p = planSueno('01:00', '07:00'); // 6 h
+      igual(p.actual, 360); igual(p.falta, 90); igual(p.pasos.length, 3);
+      igual(p.pasos[0].acostar, '00:30'); igual(p.pasos[1].acostar, '00:00'); igual(p.pasos[2].acostar, '23:30'); igual(p.pasos[2].durMin, 450);
+      igual(planSueno('23:00', '07:00').pasos.length, 0, 'ya duerme bien');
+      igual(planSueno('04:00', '07:00').pasos.length, 8, 'plan limitado a 8 semanas');
+    });
+
+    prueba('Sueño: un perfil por turno y la hora de esta semana del plan', () => {
+      const e = estadoInicial(); e.trabaja = true; e.tipoHorario = 'turnos'; e.turnos.tipos.noche.activo = true;
+      e.suenoTurnos.tarde = { levantar: '09:00', acostar: '03:00' }; // 6 h
+      const ps = analizarSueno(e);
+      igual(ps.map(x => x.clave).join(), 'manana,tarde,noche'); igual(ps[1].nivel, 'justo'); igual(ps[1].plan.pasos[0].acostar, '02:30');
+      igual(analizarSueno({ ...e, tipoHorario: 'fijo' }).length, 1, 'sin turnos, un solo perfil');
+      const guardado = { inicio: '2026-11-02', perfiles: ps };
+      igual(acostarObjetivo(guardado, 'tarde', '2026-11-05').semana, 1);
+      igual(acostarObjetivo(guardado, 'tarde', '2026-11-10').semana, 2);
+      igual(acostarObjetivo(guardado, 'tarde', '2027-03-01').semana, ps[1].plan.pasos.length, 'no pasa del último paso');
+      igual(acostarObjetivo(guardado, 'manana', '2026-11-05').alDia, true, 'ya duerme bien: mantener');
+      igual(consejosSueno({ turno: 'noche', nivel: 'poco' }).some(c => c.titulo.startsWith('Turno de noche')), true);
+    });
+
+    prueba('Turnos: cada turno usa sus propias horas de sueño para las horas libres', () => {
+      const e = estadoInicial(); e.trabaja = true; e.tipoHorario = 'turnos'; e.turnos.tipos.noche.activo = false;
+      const antes = libresDe(e, '2026-11-05').turnos.disponibilidad.tarde[0];
+      e.suenoTurnos.tarde = { levantar: '11:00', acostar: '02:00' };
+      const despues = libresDe(e, '2026-11-05').turnos.disponibilidad.tarde[0];
+      igual(JSON.stringify(antes) !== JSON.stringify(despues), true, 'levantarse más tarde cambia las franjas libres');
+      igual(despues[0].inicio >= '11:45', true, 'no hay tiempo libre antes de levantarse');
+    });
 
     prueba('Logros: se cumplen con los datos justos', () => {
       const vacio = { hoy: '2026-10-29', blocks: [], habits: [], tasks: [], goals: [], savingsGoals: [], contributions: [], revisiones: [], serie: [] };

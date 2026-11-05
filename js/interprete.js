@@ -501,8 +501,8 @@ function aplicarModificadores(o, seg, hoy) {
  * trabajos: [{ ini, fin, dias: Set, turno? }] (fin > 1440 si acaba al día siguiente); levantar/acostar en minutos.
  * Con `tipos` (turnos rotativos) devuelve una plantilla por turno: { manana: [7 días], tarde: [...] }.
  */
-export function calcularLibres({ trabajos = [], trayecto = 0, levantar = null, acostar = null, tipos = null, sinTrabajo = false }) {
-  const sueño = { general: {} };
+export function calcularLibres({ trabajos = [], trayecto = 0, levantar = null, acostar = null, tipos = null, sinTrabajo = false, sueñoTipos = {} }) {
+  const sueño = { general: {}, ...sueñoTipos };
   if (levantar != null) sueño.general.levantar = levantar;
   if (acostar != null) sueño.general.acostar = acostar;
   const lista = trabajos.map(c => ({ tipo: 'trabajo', que: 'trabajo', turno: null, ...c }));

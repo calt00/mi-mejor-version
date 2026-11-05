@@ -25,6 +25,12 @@ export function estadoInicial() {
     trayecto: 30,
     levantar: '08:00',
     acostar: '23:30',
+    // Con turnos no se duerme igual: cada turno tiene sus horas (pensadas para sus horarios típicos).
+    suenoTurnos: {
+      manana: { levantar: '05:00', acostar: '21:45' },
+      tarde: { levantar: '08:30', acostar: '00:00' },
+      noche: { levantar: '15:00', acostar: '08:00' },
+    },
     objetivos: [],
   };
 }
@@ -62,8 +68,13 @@ export function libresDe(e, hoy) {
   const trabajos = trabajosDe(e);
   const base = { trabajos, trayecto: e.trabaja ? Number(e.trayecto) || 0 : 0, levantar: toMin(e.levantar), acostar: acostarMin(e.acostar), sinTrabajo: !e.trabaja };
   const tipos = e.trabaja && e.tipoHorario === 'turnos' ? tiposActivos(e) : [];
+  // Sueño de cada turno. En el de noche solo cuenta cuándo se levanta: la hora de acostarse depende de cuándo sale.
+  const sueñoTipos = Object.fromEntries(tipos.map(tp => {
+    const s = e.suenoTurnos?.[tp];
+    return [tp, s ? { levantar: toMin(s.levantar), ...(tp === 'noche' ? {} : { acostar: acostarMin(s.acostar) }) } : {}];
+  }));
   if (!tipos.length) return { disponibilidad: calcularLibres(base), turnos: null };
-  const porTurno = calcularLibres({ ...base, tipos });
+  const porTurno = calcularLibres({ ...base, tipos, sueñoTipos });
   const patron = tipos.flatMap(tp => Array(Math.max(1, Number(e.turnos.tipos[tp].semanas) || 1)).fill(tp));
   const ic = inicioCiclo(e.turnos.dias);
   const inicio = addDays(hoy, -((weekday(hoy) - ic + 7) % 7));

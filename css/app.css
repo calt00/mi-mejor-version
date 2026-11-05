@@ -498,3 +498,16 @@ input[type="checkbox"] { width: auto; }
 .ciclo-sem.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 6px 18px var(--sombra-fuego); }
 .ciclo-sem.on::after { content: '📍 Estoy aquí'; position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: 10.5px; font-weight: 800; white-space: nowrap; padding: 2px 8px; border-radius: 999px; background: var(--grad-btn); color: #fff; }
 .ciclo-resumen { font-size: 14px; background: var(--card2); border-radius: 12px; padding: 10px 12px; margin-top: 4px; line-height: 1.6; }
+
+/* ----- Sueño ----- */
+.card.sueno { border-left: 5px solid var(--green); }
+.card.sueno.nivel-justo, .card.sueno.nivel-mucho { border-left-color: var(--yellow); }
+.card.sueno.nivel-poco { border-left-color: var(--red); }
+.plan-sueno { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.plan-sueno li { background: var(--card2); border-radius: 10px; padding: 8px 10px; font-size: 14px; }
+.plan-sueno li > span:first-child { display: inline-block; min-width: 72px; color: var(--text2); font-weight: 700; }
+.plan-sueno li.ahora { background: var(--accent-soft); outline: 2px solid var(--accent); }
+.consejos { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 10px; }
+.consejos li { display: flex; gap: 10px; align-items: flex-start; }
+.consejos li > span { font-size: 22px; line-height: 1.2; }
+details summary { cursor: pointer; color: var(--accent); }
