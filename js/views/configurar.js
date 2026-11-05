@@ -13,7 +13,8 @@ import { asignarFrases } from '../iphone.js';
 const PASOS = [['trabajo', 'Trabajo'], ['descanso', 'Descanso'], ['objetivos', 'Objetivos'], ['resumen', 'Resumen']];
 const SUGERENCIAS = ['Aprender inglés', 'Ir al gimnasio', 'Leer más', 'Informática', 'Estudiar', 'Correr', 'Cocinar', 'Programar'];
 const MOMENTOS_CORTOS = [['cualquiera', 'Me da igual'], ['manana', 'Mañana'], ['tarde', 'Tarde'], ['noche', 'Noche']];
-const TRAYECTOS = [0, 10, 15, 30, 45, 60, 90];
+const MAX_TRAYECTO = 240; // minutos
+const minutosValidos = v => Math.min(MAX_TRAYECTO, Math.max(0, Math.round(Number(v) || 0)));
 const TURNO_TXT = Object.fromEntries(TIPOS_TURNO);
 
 const leer = (o, ruta) => ruta.split('.').reduce((x, k) => x?.[k], o);
@@ -50,6 +51,11 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
   const diasHTML = ruta => `<div class="dias-sel">${DIAS_CORTO.map((l, i) => `<button type="button" class="dia-chip ${leer(e, ruta).includes(i) ? 'on' : ''}" data-accion="dia" data-ruta="${ruta}" data-valor="${i}" aria-pressed="${leer(e, ruta).includes(i)}" aria-label="${DIAS[i]}">${l}</button>`).join('')}</div>`;
   const opcionesHTML = (accion, lista, actual, extra = '') => `<div class="opciones-chip">${lista.map(([v, t]) => `<button type="button" class="chip ${String(v) === String(actual) ? 'activa' : ''}" data-accion="${accion}" data-valor="${v}" ${extra}>${t}</button>`).join('')}</div>`;
   const hora = (ruta, etiqueta) => `<input type="time" value="${leer(e, ruta)}" data-campo="${ruta}" aria-label="${etiqueta}">`;
+  // Tiempo en minutos que se escribe a mano (con − y + de 5 en 5 por comodidad).
+  const minutosHTML = (ruta, etiqueta) => `<div class="fila" style="gap:10px"><div class="stepper">
+    <button type="button" data-accion="min-menos" data-ruta="${ruta}" aria-label="Menos tiempo">−</button>
+    <input type="number" class="min-input" inputmode="numeric" min="0" max="${MAX_TRAYECTO}" step="1" value="${leer(e, ruta)}" data-campo="${ruta}" data-sin-repintar data-numero aria-label="${etiqueta}">
+    <button type="button" data-accion="min-mas" data-ruta="${ruta}" aria-label="Más tiempo">+</button></div><span class="mini">minutos</span></div>`;
   const tramoHTML = (base, quitar = '') => `<div class="tramo"><span>De</span>${hora(`${base}.inicio`, 'Entrada')}<span>a</span>${hora(`${base}.fin`, 'Salida')}${quitar}</div>`;
 
   // ---------- Turnos que duran varias semanas ----------
@@ -120,10 +126,10 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
           <p class="mini" style="margin:8px 0 0">Si tienes clases a horas distintas según el día, pon el tramo más amplio: siempre es mejor que te sobre tiempo.</p></div>` : ''}
         ${e.trabaja ? `
           <span class="cfg-etiqueta">🚌 ¿Cuánto tardas en llegar ${e.estudia ? 'al trabajo' : 'a donde trabajas'}?</span>
-          ${opcionesHTML('trayecto', TRAYECTOS.map(m => [m, m ? `${m} min` : 'Nada']), e.trayecto)}` : ''}
+          ${minutosHTML('trayecto', 'Minutos hasta el trabajo')}` : ''}
         ${e.estudia ? `
           <span class="cfg-etiqueta">🚌 ¿Cuánto tardas en llegar ${e.trabaja ? 'a clase' : 'a donde estudias'}?</span>
-          ${opcionesHTML('trayecto-estudio', TRAYECTOS.map(m => [m, m ? `${m} min` : 'Nada']), e.trayectoEstudio)}` : ''}`;
+          ${minutosHTML('trayectoEstudio', 'Minutos hasta clase')}` : ''}`;
     },
 
     descanso() {
@@ -266,8 +272,8 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
     'sueno-acepta': v => { e.mejoraSueno.acepta = v === 'si'; if (v === 'si' && !e.mejoraSueno.inicio) e.mejoraSueno.inicio = hoy; },
     'sueno-inicio': v => { e.mejoraSueno.inicio = v; },
     'tipo-horario': v => { e.tipoHorario = v; },
-    trayecto: v => { e.trayecto = Number(v); },
-    'trayecto-estudio': v => { e.trayectoEstudio = Number(v); },
+    'min-mas': (v, b) => { escribir(e, b.dataset.ruta, minutosValidos(Number(leer(e, b.dataset.ruta)) + 5)); },
+    'min-menos': (v, b) => { escribir(e, b.dataset.ruta, minutosValidos(Number(leer(e, b.dataset.ruta)) - 5)); },
     dia: (v, b) => { const lista = leer(e, b.dataset.ruta), d = Number(v); escribir(e, b.dataset.ruta, lista.includes(d) ? lista.filter(x => x !== d) : [...lista, d].sort((x, y) => x - y)); },
     'tramo-mas': () => { const ult = e.fijo.tramos.at(-1); e.fijo.tramos.push({ inicio: ult.fin, fin: ult.fin < '20:00' ? '21:00' : '23:00' }); },
     'tramo-menos': v => { e.fijo.tramos.splice(Number(v), 1); },
@@ -311,11 +317,11 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
     if (paso !== pasoAntes) cont.scrollIntoView?.({ block: 'start' });
   });
   // Horas y nombres: se guardan al cambiar; las horas repintan (cambian las horas libres y los avisos).
-  cont.addEventListener('input', ev => { const i = ev.target.closest('[data-campo]'); if (i?.hasAttribute('data-sin-repintar')) escribir(e, i.dataset.campo, i.value); });
+  cont.addEventListener('input', ev => { const i = ev.target.closest('[data-campo]'); if (i?.hasAttribute('data-sin-repintar')) escribir(e, i.dataset.campo, i.hasAttribute('data-numero') ? minutosValidos(i.value) : i.value); });
   cont.addEventListener('change', ev => {
     const i = ev.target.closest('[data-campo]');
     if (!i) return;
-    escribir(e, i.dataset.campo, i.value);
+    escribir(e, i.dataset.campo, i.hasAttribute('data-numero') ? minutosValidos(i.value) : i.value);
     pintar();
   });
 
