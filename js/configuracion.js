@@ -25,7 +25,8 @@ export function estadoInicial() {
       semanaActual: 1, // si el turno dura varias semanas, en cuál de ellas está ahora
     },
     variable: TODOS_LOS_DIAS.map(d => ({ activo: d < 5, inicio: '09:00', fin: '17:00' })),
-    trayecto: 30,
+    trayecto: 30,        // minutos hasta el trabajo
+    trayectoEstudio: 20, // minutos hasta clase
     levantar: '08:00',
     acostar: '23:30',
     // Con turnos no se duerme igual: cada turno tiene sus horas (pensadas para sus horarios típicos).
@@ -49,7 +50,7 @@ const acostarMin = h => { const m = toMin(h); return m < 360 ? m + 1440 : m; };
 
 /** Horarios de trabajo (o estudio) según las respuestas. */
 export function trabajosDe(e) {
-  const t = (r, dias, turno = null) => ({ ...tramo(r.inicio, r.fin), dias: new Set(dias), turno });
+  const t = (r, dias, turno = null) => ({ ...tramo(r.inicio, r.fin), dias: new Set(dias), turno, que: 'trabajo', trayecto: Number(e.trayecto) || 0 });
   let lista = [];
   if (e.trabaja) {
     if (e.tipoHorario === 'turnos') lista = tiposActivos(e).map(tp => t(e.turnos.tipos[tp], e.turnos.dias, tp));
@@ -57,7 +58,7 @@ export function trabajosDe(e) {
     else lista = e.fijo.tramos.map(r => t(r, e.fijo.dias));
   }
   // Los estudios ocupan las mismas horas sea cual sea el turno de trabajo.
-  if (e.estudia && e.estudio?.dias?.length) lista.push({ ...t(e.estudio, e.estudio.dias), fijo: true });
+  if (e.estudia && e.estudio?.dias?.length) lista.push({ ...t(e.estudio, e.estudio.dias), fijo: true, que: 'estudio', trayecto: Number(e.trayectoEstudio) || 0 });
   return lista;
 }
 

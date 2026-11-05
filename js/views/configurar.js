@@ -118,9 +118,12 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
           <span class="cfg-etiqueta">¿Qué días tienes clase?</span>${diasHTML('estudio.dias')}
           <span class="cfg-etiqueta">¿A qué hora?</span>${tramoHTML('estudio')}
           <p class="mini" style="margin:8px 0 0">Si tienes clases a horas distintas según el día, pon el tramo más amplio: siempre es mejor que te sobre tiempo.</p></div>` : ''}
-        ${e.trabaja || e.estudia ? `
-          <span class="cfg-etiqueta">¿Cuánto tardas en llegar?</span>
-          ${opcionesHTML('trayecto', TRAYECTOS.map(m => [m, m ? `${m} min` : 'Nada']), e.trayecto)}` : ''}`;
+        ${e.trabaja ? `
+          <span class="cfg-etiqueta">🚌 ¿Cuánto tardas en llegar ${e.estudia ? 'al trabajo' : 'a donde trabajas'}?</span>
+          ${opcionesHTML('trayecto', TRAYECTOS.map(m => [m, m ? `${m} min` : 'Nada']), e.trayecto)}` : ''}
+        ${e.estudia ? `
+          <span class="cfg-etiqueta">🚌 ¿Cuánto tardas en llegar ${e.trabaja ? 'a clase' : 'a donde estudias'}?</span>
+          ${opcionesHTML('trayecto-estudio', TRAYECTOS.map(m => [m, m ? `${m} min` : 'Nada']), e.trayectoEstudio)}` : ''}`;
     },
 
     descanso() {
@@ -264,6 +267,7 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
     'sueno-inicio': v => { e.mejoraSueno.inicio = v; },
     'tipo-horario': v => { e.tipoHorario = v; },
     trayecto: v => { e.trayecto = Number(v); },
+    'trayecto-estudio': v => { e.trayectoEstudio = Number(v); },
     dia: (v, b) => { const lista = leer(e, b.dataset.ruta), d = Number(v); escribir(e, b.dataset.ruta, lista.includes(d) ? lista.filter(x => x !== d) : [...lista, d].sort((x, y) => x - y)); },
     'tramo-mas': () => { const ult = e.fijo.tramos.at(-1); e.fijo.tramos.push({ inicio: ult.fin, fin: ult.fin < '20:00' ? '21:00' : '23:00' }); },
     'tramo-menos': v => { e.fijo.tramos.splice(Number(v), 1); },

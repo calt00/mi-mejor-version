@@ -11,7 +11,7 @@ export const inicioHabito = (h, inicioApp) => [h.creado, ...h.registros].filter(
  * Cuenta bloques del horario y hábitos; las tareas terminadas ese día suman sin penalizar.
  * Días sin nada planificado → pct null (hueco en la gráfica).
  */
-export function progresoDiario({ blocks = [], habits = [], tasks = [], desde, hasta, inicioApp }) {
+export function progresoDiario({ blocks = [], habits = [], tasks = [], desde, hasta, inicioApp, libres = {} }) {
   const porFecha = {};
   for (const b of blocks) if (b.fecha >= desde && b.fecha <= hasta) (porFecha[b.fecha] ||= []).push(b);
   const tareasPorFecha = {};
@@ -21,6 +21,12 @@ export function progresoDiario({ blocks = [], habits = [], tasks = [], desde, ha
 
   const out = [];
   for (let f = desde; f <= hasta; f = addDays(f, 1)) {
+    // Un día libre «de verdad» ni cuenta ni penaliza: solo suma lo que se haya hecho (las sugerencias aceptadas).
+    if (libres[f]?.modo === 'libre') {
+      const tareas = (tareasPorFecha[f] || 0) + (porFecha[f] || []).filter(b => b.extra && b.hecho).length;
+      out.push({ fecha: f, planificados: 0, hechos: 0, tareas, pct: tareas ? 100 : null, libre: true });
+      continue;
+    }
     const bs = porFecha[f] || [];
     const activos = hs.filter(h => h.inicio <= f);
     const planificados = bs.length + activos.length;
@@ -71,7 +77,7 @@ export function mejorRacha(h) {
 export function resumenSemana(d, lunes) {
   const dias = weekDates(lunes), domingo = dias[6];
   const hasta = d.hoy && d.hoy < domingo ? d.hoy : domingo;
-  const serie = progresoDiario({ ...d, desde: lunes, hasta });
+  const serie = progresoDiario({ ...d, desde: lunes, hasta, libres: d.libres || {} });
   const conDatos = serie.filter(x => x.pct != null);
   const mejor = conDatos.reduce((a, x) => (!a || x.pct > a.pct ? x : a), null);
   const bs = d.blocks.filter(b => b.fecha >= lunes && b.fecha <= hasta);
@@ -120,19 +126,21 @@ export const HORA_REVISION = 20 * 60;
 export function resumenDia(d, fecha) {
   const bs = d.blocks.filter(b => b.fecha === fecha).sort((a, b) => a.inicio.localeCompare(b.inicio));
   const activos = d.habits.filter(h => !h.goalId && inicioHabito(h, d.inicioApp) <= fecha);
-  const dia = progresoDiario({ ...d, desde: fecha, hasta: fecha })[0];
+  const libre = d.libres?.[fecha]?.modo === 'libre' ? d.libres[fecha] : null;
+  const dia = progresoDiario({ ...d, desde: fecha, hasta: fecha, libres: d.libres || {} })[0];
   const horas = d.goals.map(g => ({ titulo: g.titulo, min: sum(bs.filter(b => b.goalId === g.id && b.hecho), minutos) })).filter(x => x.min);
   const tareas = d.tasks.filter(t => t.hecho && t.hechoEn === fecha).length;
   return {
-    fecha, pct: dia.pct,
+    fecha, pct: dia.pct, libre,
     bien: {
       bloques: bs.filter(b => b.hecho).map(b => b.titulo),
       habitos: activos.filter(h => h.registros.includes(fecha)).map(h => ({ titulo: h.titulo, emoji: h.emoji })),
       tareas, horas,
     },
+    // En un día libre no hay nada «por mejorar»: descansar también cuenta.
     mal: {
-      bloques: bs.filter(b => !b.hecho).map(b => ({ titulo: b.titulo, importante: Boolean(b.importante) })),
-      habitos: activos.filter(h => !h.registros.includes(fecha)).map(h => ({ titulo: h.titulo, emoji: h.emoji })),
+      bloques: libre ? [] : bs.filter(b => !b.hecho).map(b => ({ titulo: b.titulo, importante: Boolean(b.importante) })),
+      habitos: libre ? [] : activos.filter(h => !h.registros.includes(fecha)).map(h => ({ titulo: h.titulo, emoji: h.emoji })),
     },
     gastado: +sum((d.expenses || []).filter(e => e.fecha === fecha), e => e.importe).toFixed(2),
     ahorrado: +sum((d.contributions || []).filter(c => c.fecha === fecha), c => c.importe).toFixed(2),
@@ -142,6 +150,7 @@ export function resumenDia(d, fecha) {
 
 /** Resumen y hasta 2 consejos para mañana a partir de resumenDia() (sin IA). */
 export function ideasDia(n) {
+  if (n.libre) return { texto: 'Hoy ha sido tu día libre: descansar también es parte del plan. No cuenta en tus estadísticas. 🏖️', consejos: [{ titulo: 'Vuelve a la rutina poco a poco', detalle: 'Mañana retoma tu hora de levantarte y empieza por lo más fácil para coger carrerilla.' }] };
   const nada = !n.bien.bloques.length && !n.mal.bloques.length && !n.bien.habitos.length && !n.mal.habitos.length && !n.bien.tareas;
   let texto;
   if (n.pct == null || nada) texto = 'Hoy no tenías nada planificado. Un día libre también cuenta. 😌';

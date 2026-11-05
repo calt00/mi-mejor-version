@@ -526,18 +526,21 @@ function franjasLibres({ d, tipo, compromisos, trabajos, diasTrabajo, turnos, tr
 
   const primero = trabajosHoy.length ? Math.min(...trabajosHoy.map(c => c.ini)) : null;
   const ultimo = trabajosHoy.length ? Math.max(...trabajosHoy.map(c => c.fin)) : null;
-  let levantar = s.levantar ?? (primero != null && primero < 600 ? Math.floor((primero - trayecto - 50) / 5) * 5 : primero != null && primero < 840 ? 450 : primero != null && primero >= 1200 ? 840 : 540);
+  // Cada actividad tiene su trayecto (al trabajo y a clase no tardas lo mismo); para las horas de levantarse y acostarse vale el mayor.
+  const tr = trabajosHoy.length ? Math.max(...trabajosHoy.map(c => c.trayecto ?? trayecto)) : trayecto;
+  let levantar = s.levantar ?? (primero != null && primero < 600 ? Math.floor((primero - tr - 50) / 5) * 5 : primero != null && primero < 840 ? 450 : primero != null && primero >= 1200 ? 840 : 540);
   // Si ayer hubo turno de noche, hoy se duerme hasta unas 7 h y media después de salir.
   const nocheAyer = trabajos.filter(c => c.fin > 1440 && c.dias.has((d + 6) % 7) && (!turnos || !c.turno || c.turno === tipo));
-  if (nocheAyer.length) levantar = Math.max(levantar, Math.max(...nocheAyer.map(c => c.fin - 1440)) + trayecto + 450);
-  let acostar = s.acostar ?? (ultimo != null && ultimo > 1260 ? Math.min(ultimo + trayecto + 90, 1500) : primero != null && primero < 480 ? 1350 : 1410);
+  if (nocheAyer.length) levantar = Math.max(levantar, Math.max(...nocheAyer.map(c => c.fin - 1440)) + tr + 450);
+  let acostar = s.acostar ?? (ultimo != null && ultimo > 1260 ? Math.min(ultimo + tr + 90, 1500) : primero != null && primero < 480 ? 1350 : 1410);
   // Para el turno de mañana, levantarse antes de lo dicho «en general» no tiene sentido si entra antes.
-  if (primero != null && levantar > primero - trayecto - 20) levantar = Math.max(0, primero - trayecto - 50);
+  if (primero != null && levantar > primero - tr - 20) levantar = Math.max(0, primero - tr - 50);
   let libres = [[levantar + 45, Math.min(acostar - 30, 1440)]];
   const restar = (a, b) => { libres = libres.flatMap(([x, y]) => (b <= x || a >= y ? [[x, y]] : [...(a > x ? [[x, a]] : []), ...(b < y ? [[b, y]] : [])])); };
   for (const c of trabajosHoy) {
-    restar(c.ini - trayecto - 15, c.fin + trayecto + (c.fin >= 810 && c.fin <= 990 ? 60 : 30));
-    if (c.ini >= 720 && c.ini <= 960) restar(c.ini - trayecto - 60, c.ini - trayecto - 15); // comer antes de entrar
+    const tc = c.trayecto ?? trayecto;
+    restar(c.ini - tc - 15, c.fin + tc + (c.fin >= 810 && c.fin <= 990 ? 60 : 30));
+    if (c.ini >= 720 && c.ini <= 960) restar(c.ini - tc - 60, c.ini - tc - 15); // comer antes de entrar
   }
   for (const c of compromisos.filter(x => x.tipo === 'actividad' && (x.dias.size ? x.dias.has(d) : true))) restar(c.ini - 15, c.fin + 15);
   // Comidas, si no coinciden con el trabajo.

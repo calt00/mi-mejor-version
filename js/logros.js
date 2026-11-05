@@ -42,7 +42,8 @@ export async function datosLogros() {
     db.all('blocks'), db.all('habits'), db.all('tasks'), db.all('goals'), db.all('savingsGoals'), db.all('contributions'),
     kvGet('revisiones', []), kvGet('inicioApp', hoy),
   ]);
-  const serie = progresoDiario({ blocks, habits, tasks, desde: inicioApp, hasta: hoy, inicioApp });
+  const libres = await kvGet('diasLibres', {});
+  const serie = progresoDiario({ blocks, habits, tasks, desde: inicioApp, hasta: hoy, inicioApp, libres });
   return { hoy, blocks, habits, tasks, goals, savingsGoals, contributions, revisiones, serie };
 }
 

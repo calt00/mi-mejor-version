@@ -3,7 +3,9 @@ import { db } from '../db.js';
 import { getDisponibilidad, saveDisponibilidad, getPrefs, savePrefs, getSettings, getTurnos, saveTurnos, dispPorFecha } from '../datos.js';
 import { tipoTurno, posicionEnPatron } from '../interprete.js';
 import { esc, sheet, toast, refrescar, hoyISO, addDays, weekDates, weekday, fmtFecha, DIAS, toMin, opciones } from '../util.js';
-import { bloqueHTML, conectarBloques, abrirEditorBloque, abrirEnvioIphone } from './comun.js';
+import { diaHTML, conectarBloques, abrirEditorBloque, abrirEnvioIphone, cargarCompromisos } from './comun.js';
+import { abrirDiaLibre } from './diaLibre.js';
+import { MOTIVO_TXT } from '../diasLibres.js';
 import { generarSemana, ordenarBloques } from '../scheduler.js';
 import { asignarFrases } from '../iphone.js';
 import { abrirConfigurador } from './configurar.js';
@@ -12,7 +14,7 @@ const estado = { modo: 'dia', fecha: hoyISO(), avisos: [] };
 const TURNO_TXT = { manana: 'mañana', tarde: 'tarde', noche: 'noche' };
 
 export async function render(root) {
-  const [goals, blocks, turnos] = await Promise.all([db.all('goals'), db.all('blocks'), getTurnos()]);
+  const [goals, blocks, turnos, comp] = await Promise.all([db.all('goals'), db.all('blocks'), getTurnos(), cargarCompromisos()]);
   const goalsById = Object.fromEntries(goals.map(g => [g.id, g]));
   const hoy = hoyISO();
   const semana = weekDates(estado.fecha);
@@ -23,10 +25,11 @@ export async function render(root) {
     : `${fmtFecha(semana[0], { day: 'numeric', month: 'short' })} – ${fmtFecha(semana[6], { day: 'numeric', month: 'short' })}`;
 
   const dia = f => {
-    const bs = visibles.filter(b => b.fecha === f);
-    return bs.length ? `<div class="bloques">${bs.map(b => bloqueHTML(b, goalsById)).join('')}</div>`
-      : `<div class="card vacio" style="padding:14px">Sin bloques${f >= hoy ? ` · <a href="#" data-anadir="${f}">añadir</a>` : ''}</div>`;
+    const bs = visibles.filter(b => b.fecha === f), cs = comp.de(f);
+    return bs.length || cs.length ? `<div class="bloques">${diaHTML(bs, cs, goalsById)}</div>`
+      : `<div class="card vacio" style="padding:14px">${comp.libres[f] ? '🏖️ Día libre' : 'Sin bloques'}${f >= hoy ? ` · <a href="#" data-anadir="${f}">añadir</a>` : ''}</div>`;
   };
+  const etiquetaLibre = f => (comp.libres[f] ? `<span class="dia-libre-tag">🏖️ Día libre · ${MOTIVO_TXT[comp.libres[f].motivo]}</span>` : '');
 
   root.innerHTML = `
     <div class="seg"><button data-modo="dia" class="${estado.modo === 'dia' ? 'activa' : ''}">Día</button>
@@ -42,11 +45,13 @@ export async function render(root) {
       <button class="chip" id="generar">⚙️ Generar semana</button>
       <button class="chip" id="enviar">📲 Enviar al iPhone</button>
       <button class="chip" id="disp">🕒 Disponibilidad</button>
+      ${estado.modo === 'dia' ? `<button class="chip" data-libre="${estado.fecha}">🏖️ Día libre</button>` : ''}
     </div>
+    ${estado.modo === 'dia' && comp.libres[estado.fecha] ? `<p class="centro" style="margin:-4px 0 10px">${etiquetaLibre(estado.fecha)}</p>` : ''}
     ${estado.avisos.length ? `<div class="aviso">${estado.avisos.map(esc).join('<br>')}</div>` : ''}
     ${estado.modo === 'dia' ? dia(estado.fecha) : semana.map(f => `
-      <div class="dia-titulo ${f === hoy ? 'hoy' : ''}"><span>${fmtFecha(f, { weekday: 'long', day: 'numeric' })}</span>
-        <span class="mini">${visibles.filter(b => b.fecha === f).length || ''}</span></div>${dia(f)}`).join('')}
+      <div class="dia-titulo ${f === hoy ? 'hoy' : ''}"><span>${fmtFecha(f, { weekday: 'long', day: 'numeric' })} ${etiquetaLibre(f)}</span>
+        <span class="fila" style="gap:8px"><span class="mini">${visibles.filter(b => b.fecha === f).length || ''}</span><button class="btn-icon" data-libre="${f}" aria-label="Marcar día libre" title="Día libre">🏖️</button></span></div>${dia(f)}`).join('')}
     <button class="fab" id="nuevo" aria-label="Nuevo bloque">+</button>`;
 
   conectarBloques(root, visibles);
@@ -59,6 +64,7 @@ export async function render(root) {
   root.querySelector('#ir-hoy')?.addEventListener('click', e => { e.preventDefault(); estado.fecha = hoy; refrescar(); });
   root.querySelectorAll('[data-anadir]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); abrirEditorBloque(null, { fecha: a.dataset.anadir }); }));
   root.querySelector('#nuevo').addEventListener('click', () => abrirEditorBloque(null, { fecha: estado.fecha < hoy ? hoy : estado.fecha }));
+  root.querySelectorAll('[data-libre]').forEach(b => b.addEventListener('click', () => abrirDiaLibre(b.dataset.libre)));
   root.querySelector('#plan').addEventListener('click', abrirConfigurador);
   root.querySelector('#generar').addEventListener('click', generar);
   root.querySelector('#enviar').addEventListener('click', () => abrirEnvioIphone(estado.modo === 'semana' ? 'semana' : estado.fecha === addDays(hoy, 1) ? 'manana' : 'hoy'));

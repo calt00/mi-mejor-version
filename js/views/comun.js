@@ -6,6 +6,7 @@ import { prepararEnvio, abrirAtajo } from '../iphone.js';
 import { esImportante } from '../scheduler.js';
 import { abrirFoco } from './foco.js';
 import { marcarBloque } from '../rutinas.js';
+import { compromisosDelDia } from '../compromisos.js';
 
 export const duracionMin = b => toMin(b.fin) - toMin(b.inicio);
 
@@ -32,6 +33,28 @@ export function momentoBloque(b) {
   if (n >= toMin(b.fin)) return 'pasado';
   if (n >= toMin(b.inicio)) return 'ahora';
   return 'futuro';
+}
+
+/** Carga lo necesario para pintar trabajo, clases y trayectos: devuelve de(fecha) y el mapa de días libres. */
+export async function cargarCompromisos() {
+  const [config, turnos, libres] = await Promise.all([kvGet('configuracion'), kvGet('turnos'), kvGet('diasLibres', {})]);
+  return { libres, de: fecha => compromisosDelDia({ config, turnos, fecha, libres }) };
+}
+
+/** Una tarjeta de trabajo, clase o trayecto: se ve en el horario pero no se marca (no cuenta en el progreso). */
+export function compromisoHTML(c) {
+  const icono = c.tipo === 'trayecto' ? (c.sentido === 'ida' ? '🚌' : '🏠') : c.que === 'estudio' ? '📚' : '💼';
+  const n = nowMin(), ini = toMin(c.inicio), fin = toMin(c.fin);
+  const ahora = c.fecha === hoyISO() && n >= ini && (fin > ini ? n < fin : true);
+  return `<div class="bloque compromiso ${c.tipo === 'trayecto' ? 'trayecto' : c.que}">
+    <div class="hora"><b>${c.inicio}</b>${c.fin}</div>
+    <div class="grow">${ahora ? '<div class="etiqueta-ahora">Ahora</div>' : ''}<div class="t">${icono} ${esc(c.titulo)}</div></div></div>`;
+}
+
+/** Bloques del día y compromisos mezclados por hora, ya como HTML. */
+export function diaHTML(bloques, compromisos, goalsById) {
+  const items = [...bloques.map(b => ({ h: b.inicio, html: bloqueHTML(b, goalsById) })), ...compromisos.map(c => ({ h: c.inicio, html: compromisoHTML(c) }))];
+  return items.sort((a, b) => a.h.localeCompare(b.h)).map(x => x.html).join('');
 }
 
 export function bloqueHTML(b, goalsById = {}) {

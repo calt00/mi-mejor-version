@@ -23,6 +23,8 @@
     import { construirPayload, avisosSueno } from '../js/iphone.js';
     import { progresoDiario, mediaMovil, mejorRacha, resumenSemana, semanaPendiente, inicioHabito, resumenDia, ideasDia, diaPendiente } from '../js/progreso.js';
     import { logrosCumplidos, LOGROS } from '../js/logros.js';
+    import { compromisosDelDia } from '../js/compromisos.js';
+    import { opinionDiaLibre, diasLibresRecientes, bloquesDeSugerencias, sugerenciasPara } from '../js/diasLibres.js';
     import { dormirMin, valorarSueno, planSueno, analizarSueno, acostarObjetivo, consejosSueno, recortarFranjas, acostarAbs, valorarHorario } from '../js/sueno.js';
     import { barrasSVG, calendarioHTML } from '../js/grafica.js';
     import { normalizarPlan, cruzarConExistentes, unirFranjas, normalizarTurnos } from '../js/plan.js';
@@ -413,6 +415,61 @@
       const a = avisosSueno({ plan, turnos: null, desde: '2026-11-05', hasta: '2026-11-05', hoy: '2026-11-05', ahora: 600, antelacion: 60, alarma: true });
       igual(a[0].inicio, '22:00'); igual(a[0].importante, true);
       igual(avisosSueno({ plan, turnos: null, desde: '2026-11-05', hasta: '2026-11-05', hoy: '2026-11-05', ahora: 600 })[0].importante, false, 'por defecto, solo aviso');
+    });
+
+    prueba('Trayecto al trabajo y a clase por separado', () => {
+      const e = estadoInicial(); e.trabaja = false; e.estudia = true; e.estudio = { dias: [0], inicio: '09:00', fin: '14:00' };
+      const franjas = (tray, trayTrabajo) => { e.trayectoEstudio = tray; e.trayecto = trayTrabajo; return libresDe(e, '2026-11-05').disponibilidad[0]; };
+      igual(JSON.stringify(franjas(0, 90)) === JSON.stringify(franjas(0, 0)), true, 'el trayecto al trabajo no afecta si solo estudias');
+      igual(JSON.stringify(franjas(0, 0)) !== JSON.stringify(franjas(60, 0)), true, 'el trayecto a clase sí');
+    });
+
+    prueba('Horario: trabajo, clases y trayectos se ven en el día', () => {
+      const config = { ...estadoInicial(), trabaja: true, tipoHorario: 'fijo', fijo: { dias: [0, 1, 2, 3, 4], tramos: [{ inicio: '09:00', fin: '17:00' }] }, trayecto: 30, estudia: true, estudio: { dias: [0], inicio: '18:00', fin: '20:00' }, trayectoEstudio: 20 };
+      const lunes = compromisosDelDia({ config, turnos: null, fecha: '2026-11-02' });
+      igual(lunes.map(c => `${c.inicio}-${c.fin} ${c.titulo}`).join(' | '), '08:30-09:00 Ir al trabajo | 09:00-17:00 Trabajo | 17:00-17:30 Volver a casa | 17:40-18:00 Ir a clase | 18:00-20:00 Estudios | 20:00-20:20 Volver a casa');
+      igual(compromisosDelDia({ config, turnos: null, fecha: '2026-11-03' }).some(c => c.que === 'estudio'), false, 'el martes no hay clase');
+      igual(compromisosDelDia({ config, turnos: null, fecha: '2026-11-07' }).length, 0, 'el sábado no hay nada');
+      igual(compromisosDelDia({ config, turnos: null, fecha: '2026-11-02', libres: { '2026-11-02': { modo: 'libre' } } }).length, 0, 'un día libre no tiene trabajo ni clase');
+      igual(compromisosDelDia({ config: null, turnos: null, fecha: '2026-11-02' }).length, 0, 'sin cuestionario, nada');
+    });
+
+    prueba('Horario: el turno de noche acaba al día siguiente y la vuelta cae en la mañana', () => {
+      const e = { ...estadoInicial(), trabaja: true, tipoHorario: 'turnos', trayecto: 30 };
+      e.turnos = { ...e.turnos, tipos: { manana: { ...e.turnos.tipos.manana, activo: false }, tarde: { ...e.turnos.tipos.tarde, activo: false }, noche: { inicio: '22:00', fin: '06:00', activo: true, semanas: 1 } }, actual: 'noche' };
+      const turnos = libresDe(e, '2026-11-02').turnos;
+      const martes = compromisosDelDia({ config: e, turnos, fecha: '2026-11-03' }).map(c => `${c.inicio}-${c.fin} ${c.titulo}`);
+      igual(martes.includes('22:00-06:00 Trabajo'), true); igual(martes.includes('21:30-22:00 Ir al trabajo'), true);
+      igual(martes.includes('06:00-06:30 Volver a casa'), true, 'la vuelta del turno del lunes');
+      igual(compromisosDelDia({ config: e, turnos, fecha: '2026-11-03', libres: { '2026-11-02': { modo: 'libre' } } }).some(c => c.titulo === 'Volver a casa'), false, 'si el lunes era libre, no hubo turno ni vuelta');
+    });
+
+    prueba('Día libre: la opinión depende del motivo y de cuántos te has cogido', () => {
+      igual(opinionDiaLibre('festivo').nivel, 'bien'); igual(opinionDiaLibre('vacaciones').nivel, 'bien'); igual(opinionDiaLibre('enfermo').nivel, 'bien');
+      igual(opinionDiaLibre('libre', 0).nivel, 'bien'); igual(opinionDiaLibre('libre', 1).nivel, 'bien');
+      igual(opinionDiaLibre('libre', 2).nivel, 'atencion'); igual(opinionDiaLibre('libre', 3).nivel, 'exceso'); igual(opinionDiaLibre('libre', 6).nivel, 'exceso');
+      igual(opinionDiaLibre('libre', 0).texto.includes('n.º 1'), true, 'dice el número de este mes');
+      const libres = { '2026-10-20': { motivo: 'libre' }, '2026-10-25': { motivo: 'festivo' }, '2026-08-01': { motivo: 'libre' }, '2026-11-05': { motivo: 'libre' } };
+      igual(diasLibresRecientes(libres, '2026-11-05'), 1, 'solo los voluntarios de los últimos 30 días, sin contar el propio día');
+    });
+
+    prueba('Día libre: las sugerencias se convierten en bloques sin pisarse', () => {
+      const b = bloquesDeSugerencias('2026-11-05', ['levantarse', 'estirar', 'paseo']);
+      igual(b.map(x => x.inicio + '-' + x.fin).join(), '09:00-09:30,09:45-10:00,10:30-11:15');
+      igual(b.every(x => x.extra && x.fecha === '2026-11-05' && !x.hecho), true);
+      igual(bloquesDeSugerencias('2026-11-05', ['descansar'], 'enfermo').length, 1, 'enfermo tiene sus propias sugerencias');
+      igual(sugerenciasPara('enfermo').some(s => s.id === 'ejercicio'), false, 'enfermo no propone ejercicio');
+    });
+
+    prueba('Día libre: no cuenta en las estadísticas ni penaliza', () => {
+      const f = '2026-11-05';
+      const base = { desde: f, hasta: f, inicioApp: '2026-10-01', tasks: [], habits: [], blocks: [{ ...blq(f, false), id: 'a' }, { ...blq(f, false, 'A', '10:00', '11:00'), id: 'b' }] };
+      igual(progresoDiario(base)[0].pct, 0, 'sin día libre: 0 % de 2');
+      const libre = progresoDiario({ ...base, libres: { [f]: { modo: 'libre' } } })[0];
+      igual(libre.pct, null, 'día libre: hueco, ni cuenta ni resta'); igual(libre.planificados, 0);
+      const conExtra = progresoDiario({ ...base, blocks: [...base.blocks, { ...blq(f, true), id: 'x', extra: true }], libres: { [f]: { modo: 'libre' } } })[0];
+      igual(conExtra.pct, 100, 'lo que sí se hace de la rutina libre suma');
+      igual(progresoDiario({ ...base, libres: { [f]: { modo: 'rutina' } } })[0].pct, 0, 'con rutina, cuenta con normalidad');
     });
 
     prueba('Logros: se cumplen con los datos justos', () => {

@@ -9,10 +9,10 @@ const MAX_REVISIONES = 52;
 const MAX_REVISIONES_DIA = 60;
 
 async function datosSemana() {
-  const [goals, blocks, habits, tasks, expenses, contributions, inicioApp] = await Promise.all([
-    db.all('goals'), db.all('blocks'), db.all('habits'), db.all('tasks'), db.all('expenses'), db.all('contributions'), kvGet('inicioApp', hoyISO()),
+  const [goals, blocks, habits, tasks, expenses, contributions, inicioApp, libres] = await Promise.all([
+    db.all('goals'), db.all('blocks'), db.all('habits'), db.all('tasks'), db.all('expenses'), db.all('contributions'), kvGet('inicioApp', hoyISO()), kvGet('diasLibres', {}),
   ]);
-  return { hoy: hoyISO(), goals, blocks, habits, tasks, expenses, contributions, inicioApp };
+  return { hoy: hoyISO(), goals, blocks, habits, tasks, expenses, contributions, inicioApp, libres };
 }
 
 async function guardar(rev) {
@@ -102,15 +102,15 @@ function diaHTML(n, r, sueno) {
 
 /** Abre (y guarda) la revisión de la noche del día `fecha`. En domingo ofrece seguir con la semanal. */
 export async function abrirRevisionDiaria(fecha = hoyISO()) {
-  const [goals, blocks, habits, tasks, expenses, contributions, inicioApp, guardadas] = await Promise.all([
+  const [goals, blocks, habits, tasks, expenses, contributions, inicioApp, guardadas, libres] = await Promise.all([
     db.all('goals'), db.all('blocks'), db.all('habits'), db.all('tasks'), db.all('expenses'), db.all('contributions'),
-    kvGet('inicioApp', fecha), kvGet('revisionesDia', []),
+    kvGet('inicioApp', fecha), kvGet('revisionesDia', []), kvGet('diasLibres', {}),
   ]);
   const [planSueno, turnos] = await Promise.all([kvGet('planSueno'), kvGet('turnos')]);
   // La hora de acostarse depende del turno de mañana, que es el que marca cuándo toca madrugar.
   const claveSueno = turnos ? tipoTurno(turnos, addDays(fecha, 1)) : 'general';
   const sueno = acostarObjetivo(planSueno, claveSueno, fecha);
-  const n = resumenDia({ goals, blocks, habits, tasks, expenses, contributions, inicioApp }, fecha);
+  const n = resumenDia({ goals, blocks, habits, tasks, expenses, contributions, inicioApp, libres }, fecha);
   const r = ideasDia(n);
   const historial = guardadas.filter(x => x.fecha !== fecha);
   historial.push({ fecha, pct: n.pct, texto: r.texto });

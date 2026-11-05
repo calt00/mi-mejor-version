@@ -492,8 +492,9 @@ const ACCIONES = {
 
   async progreso(o, reg, hoy) {
     const [blocks, habits, tasks, goals, inicioApp] = await Promise.all([db.all('blocks'), db.all('habits'), db.all('tasks'), db.all('goals'), kvGet('inicioApp', hoy)]);
-    const semana = progresoDiario({ blocks, habits, tasks, desde: weekStart(hoy), hasta: hoy, inicioApp });
-    const anterior = progresoDiario({ blocks, habits, tasks, desde: addDays(weekStart(hoy), -7), hasta: addDays(weekStart(hoy), -1), inicioApp });
+    const libres = await kvGet('diasLibres', {});
+    const semana = progresoDiario({ blocks, habits, tasks, desde: weekStart(hoy), hasta: hoy, inicioApp, libres });
+    const anterior = progresoDiario({ blocks, habits, tasks, desde: addDays(weekStart(hoy), -7), hasta: addDays(weekStart(hoy), -1), inicioApp, libres });
     const pct = mediaSerie(semana), pctAnt = mediaSerie(anterior);
     const lineasObj = goals.filter(g => !g.archivado && g.horasSemana).map(g => {
       const min = blocks.filter(b => b.goalId === g.id && b.hecho && b.fecha >= weekStart(hoy) && b.fecha <= hoy).reduce((a, b) => a + duracion(b), 0);

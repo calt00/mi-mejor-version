@@ -13,18 +13,18 @@ const mayuscula = s => s.charAt(0).toUpperCase() + s.slice(1);
 
 export async function render(root) {
   const hoy = hoyISO();
-  const [goals, blocks, habits, tasks, inicioApp, logros, revisiones] = await Promise.all([
+  const [goals, blocks, habits, tasks, inicioApp, logros, revisiones, libres] = await Promise.all([
     db.all('goals'), db.all('blocks'), db.all('habits'), db.all('tasks'),
-    kvGet('inicioApp', hoy), kvGet('logros', {}), kvGet('revisiones', []),
+    kvGet('inicioApp', hoy), kvGet('logros', {}), kvGet('revisiones', []), kvGet('diasLibres', {}),
   ]);
   const n = estado.rango;
   const desde = addDays(hoy, -(n - 1));
   // Se calcula 6 días antes para que la media de 7 días empiece completa.
-  const extendida = progresoDiario({ blocks, habits, tasks, desde: addDays(desde, -6), hasta: hoy, inicioApp });
+  const extendida = progresoDiario({ blocks, habits, tasks, desde: addDays(desde, -6), hasta: hoy, inicioApp, libres });
   const serie = extendida.slice(6);
   const media = mediaMovil(extendida).slice(6);
   const promedio = mediaSerie(serie);
-  const anterior = mediaSerie(progresoDiario({ blocks, habits, tasks, desde: addDays(desde, -n), hasta: addDays(desde, -1), inicioApp }));
+  const anterior = mediaSerie(progresoDiario({ blocks, habits, tasks, desde: addDays(desde, -n), hasta: addDays(desde, -1), inicioApp, libres }));
   const diff = promedio != null && anterior != null ? promedio - anterior : null;
   const buenos = serie.filter(d => d.pct >= 80).length;
   const horas = horasPorObjetivo(goals, blocks, desde, hoy, n);
