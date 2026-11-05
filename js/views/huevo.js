@@ -133,7 +133,8 @@ export async function abrirHuevo(estado) {
           <li class="${estado.reto.pctHoy >= def.umbral ? 'ok' : ''}"><span>${estado.reto.pctHoy >= def.umbral ? '✅' : '⬜'}</span>Cumplido de hoy: <b>${estado.reto.pctHoy} %</b> (mínimo ${def.umbral} %)</li>
         </ul>
         <div class="mini">Levantarte, trabajar o estudiar suman un poco solos${estado.reto.basicosHoy ? ` (hoy +${num(estado.reto.basicosHoy)})` : ''}, pero no bastan: hace falta algo tuyo.</div>
-        ${estado.reto.faltanPuntos || estado.reto.faltanHabitos ? `<div class="aviso" style="margin:10px 0 0">Con lo que tienes ahora <b>no llegas a este reto</b>: ${estado.reto.faltanPuntos ? `te faltan ${estado.reto.faltanPuntos} ${estado.reto.faltanPuntos === 1 ? 'cosa' : 'cosas'} que hacer al día` : ''}${estado.reto.faltanPuntos && estado.reto.faltanHabitos ? ' y ' : ''}${estado.reto.faltanHabitos ? `${estado.reto.faltanHabitos} ${estado.reto.faltanHabitos === 1 ? 'hábito' : 'hábitos'}` : ''}. Añádelos en <a href="#objetivos" id="ir-objetivos">Objetivos</a> (hábitos, objetivos o tareas).</div>` : ''}
+        ${estado.reto.faltanPuntos || estado.reto.faltanHabitos ? `<div class="aviso" style="margin:10px 0 0">Con lo que tienes ahora <b>no llegas a este reto</b>: ${estado.reto.faltanPuntos ? `te faltan ${estado.reto.faltanPuntos} ${estado.reto.faltanPuntos === 1 ? 'cosa' : 'cosas'} que hacer al día` : ''}${estado.reto.faltanPuntos && estado.reto.faltanHabitos ? ' y ' : ''}${estado.reto.faltanHabitos ? `${estado.reto.faltanHabitos} ${estado.reto.faltanHabitos === 1 ? 'hábito' : 'hábitos'}` : ''}.
+          <div class="acciones">${estado.reto.faltanHabitos ? '<button type="button" class="btn chico" id="ir-habitos">✨ Descubrir hábitos</button>' : ''}${estado.reto.faltanPuntos > estado.reto.faltanHabitos ? '<a class="btn gris chico" href="#objetivos" id="ir-objetivos">🎯 Ir a Objetivos</a>' : ''}</div></div>` : ''}
         ${estado.reto.cumpleHoy ? '<div class="nota" style="margin-top:10px">🔥 ¡Hoy has cumplido su reto! El huevo se está calentando.</div>' : ''}</div>
       <div class="nota"><b>Cómo se calienta:</b> un día que cumples el reto suma 1 de calor (hasta 2 si encadenas días buenos). Si cumples el % pero te quedas corto de puntos o hábitos, suma solo 0,25. Un día flojo lo enfría medio punto. Los días libres no cuentan ni restan.</div>
       <div class="acciones"><button class="btn gris chico" id="cambiar">Cambiar de huevo</button></div>`;
@@ -142,6 +143,8 @@ export async function abrirHuevo(estado) {
   const escena = el.querySelector('#escena');
   escena.addEventListener('click', () => reaccionar(escena, estado));
   el.querySelector('#ir-objetivos')?.addEventListener('click', close);
+  // Va directo al catálogo de hábitos (se carga al momento para no enredar los módulos entre sí).
+  el.querySelector('#ir-habitos')?.addEventListener('click', async () => { close(); const { abrirCatalogoHabitos } = await import('./habitos.js'); abrirCatalogoHabitos(); });
   el.querySelector('#cambiar')?.addEventListener('click', () => { if (confirm('Si cambias de huevo, empiezas de cero con el nuevo. ¿Seguro?')) { close(); abrirElegirHuevo(); } });
   el.querySelector('#otro')?.addEventListener('click', () => { close(); abrirElegirHuevo(); });
   el.querySelector('#renombrar')?.addEventListener('click', () => { close(); pedirNombre(estado, { tituloCorto: true }); });
