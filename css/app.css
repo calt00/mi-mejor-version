@@ -511,3 +511,4 @@ input[type="checkbox"] { width: auto; }
 .consejos li { display: flex; gap: 10px; align-items: flex-start; }
 .consejos li > span { font-size: 22px; line-height: 1.2; }
 details summary { cursor: pointer; color: var(--accent); }
+.card .switch { padding-left: 0; padding-right: 0; }

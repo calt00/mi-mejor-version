@@ -23,7 +23,7 @@
     import { construirPayload, avisosSueno } from '../js/iphone.js';
     import { progresoDiario, mediaMovil, mejorRacha, resumenSemana, semanaPendiente, inicioHabito, resumenDia, ideasDia, diaPendiente } from '../js/progreso.js';
     import { logrosCumplidos, LOGROS } from '../js/logros.js';
-    import { dormirMin, valorarSueno, planSueno, analizarSueno, acostarObjetivo, consejosSueno } from '../js/sueno.js';
+    import { dormirMin, valorarSueno, planSueno, analizarSueno, acostarObjetivo, consejosSueno, recortarFranjas, acostarAbs } from '../js/sueno.js';
     import { barrasSVG, calendarioHTML } from '../js/grafica.js';
     import { normalizarPlan, cruzarConExistentes, unirFranjas, normalizarTurnos } from '../js/plan.js';
     import { interpretarTexto, tipoTurno } from '../js/interprete.js';
@@ -358,6 +358,22 @@
       const b = avisosSueno({ ...base, plan: tarde });
       igual(b[0].fecha, '2026-11-06'); igual(b[0].inicio, '01:00', 'cae dentro del rango: madrugada del día siguiente');
       igual(b[1].fecha, '2026-11-06'); igual(b[1].inicio, '23:30', 'el último cae fuera del rango: se adelanta a las 23:30');
+    });
+
+    prueba('Sueño: el horario deja libre la media hora antes de acostarte', () => {
+      const f = [{ inicio: '17:30', fin: '22:30' }, { inicio: '07:00', fin: '07:20' }];
+      const r = recortarFranjas(f, acostarAbs('22:00'));
+      igual(JSON.stringify(r), JSON.stringify([{ inicio: '17:30', fin: '21:30' }]), 'corta a las 21:30 y descarta tramos de menos de 30 min');
+      igual(JSON.stringify(recortarFranjas([{ inicio: '18:00', fin: '21:00' }], acostarAbs('23:30'))), JSON.stringify([{ inicio: '18:00', fin: '21:00' }]), 'si ya acaba antes, no cambia');
+      igual(recortarFranjas([{ inicio: '18:00', fin: '23:59' }], acostarAbs('01:00'))[0].fin, '23:59', 'acostarse de madrugada no recorta nada');
+      igual(acostarAbs('00:30'), 1470);
+    });
+
+    prueba('Aviso de sueño: antelación y alarma configurables', () => {
+      const plan = { inicio: '2026-11-02', perfiles: [{ clave: 'general', acostar: '23:00', plan: { pasos: [] } }] };
+      const a = avisosSueno({ plan, turnos: null, desde: '2026-11-05', hasta: '2026-11-05', hoy: '2026-11-05', ahora: 600, antelacion: 60, alarma: true });
+      igual(a[0].inicio, '22:00'); igual(a[0].importante, true);
+      igual(avisosSueno({ plan, turnos: null, desde: '2026-11-05', hasta: '2026-11-05', hoy: '2026-11-05', ahora: 600 })[0].importante, false, 'por defecto, solo aviso');
     });
 
     prueba('Logros: se cumplen con los datos justos', () => {

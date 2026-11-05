@@ -10,6 +10,19 @@ export const OBJETIVO_MIN = 450;    // 7 h 30: un punto medio realista
 const PASO_SEMANAL = 30;            // minutos que se adelanta la hora de acostarse cada semana (≈15 min cada 3-4 días)
 const MAX_SEMANAS = 8;
 
+/** Ajustes de los avisos y del horario: minutos de antelación, si suena como alarma y si el horario sigue el plan. */
+export const AJUSTES_SUENO = { antelacion: 30, alarma: false, ajustarHorario: true };
+
+/** Hora de acostarse en minutos desde las 00:00 del día: de madrugada cuenta como «pasadas las 24:00». */
+export const acostarAbs = hhmm => { const m = toMin(hhmm); return m < 360 ? m + 1440 : m; };
+
+/** Quita de las franjas libres lo que cae dentro de la media hora previa a acostarte. */
+export function recortarFranjas(franjas, acostar) {
+  const tope = Math.min(acostar - 30, 1439);
+  return franjas.map(f => ({ inicio: f.inicio, fin: toHHMM(Math.min(toMin(f.fin), tope)) }))
+    .filter(f => toMin(f.fin) - toMin(f.inicio) >= 30);
+}
+
 const mod = m => ((m % 1440) + 1440) % 1440;
 
 /** Minutos entre acostarte y levantarte (pasando por la medianoche si hace falta). */

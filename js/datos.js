@@ -1,7 +1,8 @@
 // Valores por defecto y acceso a la configuración guardada.
 import { kvGet, kvSet } from './db.js';
 import { tipoTurno } from './interprete.js';
-import { weekday } from './util.js';
+import { weekday, weekStart, addDays } from './util.js';
+import { AJUSTES_SUENO, acostarObjetivo, acostarAbs, recortarFranjas } from './sueno.js';
 
 export const AREAS = [
   ['salud', '💪 Salud y deporte'], ['estudio', '📚 Estudio'], ['trabajo', '💼 Trabajo'],
@@ -66,6 +67,7 @@ export const getSettings = getter('settings', DEF_SETTINGS);
 export const getProfile = getter('profile', DEF_PROFILE);
 export const getPrefs = getter('prefs', DEF_PREFS);
 export const getIngresos = getter('ingresos', DEF_INGRESOS);
+export const getAjustesSueno = async () => ({ ...AJUSTES_SUENO, ...(await kvGet('ajustesSueno', {})) });
 export const getDisponibilidad = async () => kvGet('disponibilidad', DEF_DISPONIBILIDAD);
 
 // Turnos rotativos: { rotativo, patron: ['manana','tarde',…], referencia, inicioCiclo, horarios, disponibilidad: { tipo: [7 días] } }.
@@ -77,10 +79,21 @@ export const saveTurnos = v => kvSet('turnos', v);
  * (si rotan) y con los cambios de un solo día que se le piden al asistente (kv «dispExtra»: { fecha: franjas }).
  */
 export async function dispPorFecha() {
-  const [base, turnos, extra] = await Promise.all([getDisponibilidad(), getTurnos(), kvGet('dispExtra', {})]);
+  const [base, turnos, extra, plan, ajustes] = await Promise.all([getDisponibilidad(), getTurnos(), kvGet('dispExtra', {}), kvGet('planSueno'), getAjustesSueno()]);
   const semana = turnos?.rotativo ? fecha => turnos.disponibilidad?.[tipoTurno(turnos, fecha)] || base : () => base;
+  // Con plan de sueño, cada día se corta a la hora de acostarte de esa semana del plan (la del turno de mañana).
+  const conSueno = (s, fecha) => {
+    if (!plan?.perfiles?.length || !ajustes.ajustarHorario) return s;
+    return s.map((franjas, i) => {
+      const dia = addDays(weekStart(fecha), i);
+      const clave = turnos?.rotativo ? tipoTurno(turnos, addDays(dia, 1)) : 'general';
+      if (clave === 'noche') return franjas; // se duerme de día: no recorta la tarde
+      const o = acostarObjetivo(plan, clave, dia);
+      return o && !o.alDia ? recortarFranjas(franjas, acostarAbs(o.acostar)) : franjas;
+    });
+  };
   return fecha => {
-    const s = semana(fecha);
+    const s = conSueno(semana(fecha), fecha);
     if (!extra?.[fecha]) return s;
     const copia = [...s];
     copia[weekday(fecha)] = extra[fecha];

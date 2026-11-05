@@ -5,7 +5,7 @@ import { esc, formData, toast, refrescar, sheet, miniMarkdown, hoyISO, opciones,
 import { mostrarBienvenida } from './bienvenida.js';
 import { abrirPlan } from './plan.js';
 import { abrirConfigurador } from './configurar.js';
-import { tarjetaSuenoHTML, abrirPlanSueno } from './sueno.js';
+import { tarjetaSuenoHTML, abrirPlanSueno, conectarAjustesSueno } from './sueno.js';
 
 export async function render(root) {
   const [p, s, ultimaCopia, situacion] = await Promise.all([getProfile(), getSettings(), kvGet('ultimaCopia'), kvGet('miSituacion')]);
@@ -96,6 +96,7 @@ export async function render(root) {
   root.querySelector('#exportar').addEventListener('click', async () => { if (await exportar()) refrescar(); });
   root.querySelector('#bienvenida').addEventListener('click', mostrarBienvenida);
   root.querySelector('#ver-sueno')?.addEventListener('click', abrirPlanSueno);
+  if (root.querySelector('#ver-sueno')) conectarAjustesSueno(root, toast);
   root.querySelector('#borrar-todo').addEventListener('click', async () => {
     if (!confirm('Vas a borrar TODOS tus datos de este iPhone: objetivos, horario, hábitos, ahorro y ajustes. ¿Quieres continuar?')) return;
     if (!confirm('Última comprobación: esto no se puede deshacer. Si no has exportado una copia, cancela y hazla antes. ¿Borrar todo?')) return;
