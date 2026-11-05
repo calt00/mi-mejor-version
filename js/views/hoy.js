@@ -11,7 +11,7 @@ import { comprobarLogros } from '../logros.js';
 import { abrirRevision, abrirRevisionDiaria } from './revision.js';
 import { exportar } from './perfil.js';
 import { filaHabitosHTML, conectarFilaHabitos } from './habitos.js';
-import { huevoCentroHTML, conectarHuevo, comprobarEclosion, getHuevo } from './huevo.js';
+import { huevoCentroHTML, conectarHuevo, comprobarEclosion, getHuevo, aplicarReaccion } from './huevo.js';
 import { estadoHuevo } from '../huevo.js';
 
 const DIAS_ENTRE_COPIAS = 7;
@@ -89,7 +89,7 @@ export async function render(root) {
     ${copia ? aviso('copia', '💾', copia.nunca ? '<b>Aún no has hecho copia de seguridad</b>' : `<b>Hace ${copia.dias} días de tu última copia</b>`, 'Copiar', '<button class="btn-icon" id="copia-luego" aria-label="Más tarde">✕</button>') : ''}
 
     <div class="seccion"><h2>Tu horario</h2><span class="fila" style="gap:6px"><button class="btn sec chico" id="dia-libre">🏖️ Día libre</button><button class="btn sec chico" id="nuevo-bloque">+ Bloque</button></span></div>
-    ${compHoy.length ? `<div class="bloques">${diaHTML(deHoy, compHoy, goalsById)}</div>` : ''}
+    ${deHoy.length || compHoy.length ? `<div class="bloques">${diaHTML(deHoy, compHoy, goalsById)}</div>` : ''}
     ${deHoy.length ? '<button class="btn gris ancho" id="enviar" style="margin-top:12px">📲 Enviar al iPhone</button>' : !compHoy.length || compHoy.every(c => c.tipo === 'despertar') ? `
       <div class="card vacio" style="margin-top:8px"><span class="ico">${libreHoy ? '🏖️' : '🗓️'}</span>${libreHoy ? 'Hoy no hay nada planificado: es tu día libre.' : 'No tienes nada planificado para hoy.'}
         ${libreHoy ? '' : '<div class="acciones" style="justify-content:center"><a class="btn chico" href="#horario">Crear mi horario</a></div>'}</div>` : ''}
@@ -112,6 +112,7 @@ export async function render(root) {
   root.querySelector('#copia-luego')?.addEventListener('click', async () => { await kvSet('copiaPospuesta', addDays(hoy, 2)); refrescar(); });
 
   conectarHuevo(root, estadoH);
+  aplicarReaccion(root, estadoH, { completo: pct >= 100 && !descansando });
   comprobarEclosion(estadoH).catch(e => console.warn('Huevo:', e));
   comprobarLogros().catch(e => console.warn('Logros:', e));
 }

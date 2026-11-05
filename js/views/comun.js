@@ -8,6 +8,7 @@ import { abrirFoco } from './foco.js';
 import { marcarBloque } from '../rutinas.js';
 import { compromisosDelDia } from '../compromisos.js';
 import { rachaActual } from '../rachas.js';
+import { pedirReaccion } from './huevo.js';
 
 export const duracionMin = b => toMin(b.fin) - toMin(b.inicio);
 
@@ -77,7 +78,7 @@ export function conectarBloques(root, bloques) {
     e.stopPropagation();
     const b = bloques.find(x => x.id === btn.dataset.hecho);
     await marcarBloque(b, !b.hecho); // si es de un hábito, también se marca el hábito
-    if (!b.hecho) { navigator.vibrate?.(30); toast('¡Hecho! Un paso más. 💪'); }
+    if (!b.hecho) { navigator.vibrate?.(30); toast('¡Hecho! Un paso más. 💪'); pedirReaccion(); }
     refrescar();
   }));
   root.querySelectorAll('[data-foco]').forEach(btn => btn.addEventListener('click', e => {

@@ -631,3 +631,7 @@ details summary { cursor: pointer; color: var(--accent); }
 .chispas { position: absolute; inset: 0; pointer-events: none; }
 .chispas i { position: absolute; left: 50%; top: 50%; width: 9px; height: 9px; margin: -4px; border-radius: 50%; background: radial-gradient(circle, #fff, #ffc400); animation: chispa 1.3s ease-out forwards; }
 @keyframes chispa { 0% { transform: translate(0, 0) scale(.4); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(1.2); opacity: 0; } }
+
+.hero-dia { position: relative; }
+.hero-dia > .huevo-frase { top: -2px; max-width: 280px; z-index: 5; }
+.hero-dia > .chispas { inset: 0; z-index: 4; }

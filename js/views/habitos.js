@@ -6,6 +6,7 @@ import { esc, sheet, toast, refrescar, fmtHoras, formData, opciones, hoyISO } fr
 import { FAMILIAS, CATEGORIAS_HABITO, DIFICULTAD, COSTE, filtrar, sugerir, habitoPorId, pensamientosDe, siguienteNivel } from '../habitos.js';
 import { crearHabito, ponerEnHorario, borrarHabito, marcarHabito, MOMENTOS_HABITO } from '../rutinas.js';
 import { racha } from './comun.js';
+import { pedirReaccion } from './huevo.js';
 import { abrirCalendarioHabito } from './progreso.js';
 
 const ETIQUETA_DIF = Object.fromEntries(DIFICULTAD), ETIQUETA_COSTE = Object.fromEntries(COSTE);
@@ -108,7 +109,7 @@ export function conectarFilaHabitos(root, habits, hoy = hoyISO()) {
     const on = h.registros.includes(hoy);
     await marcarHabito(h, hoy, !on);
     h.registros = on ? h.registros.filter(d => d !== hoy) : [...h.registros, hoy];
-    if (!on) { navigator.vibrate?.(30); const r = racha(h); if (r > 1) toast(`🔥 ¡Racha de ${r} días!`); }
+    if (!on) { navigator.vibrate?.(30); pedirReaccion(); const r = racha(h); if (r > 1) toast(`🔥 ¡Racha de ${r} días!`); }
     refrescar();
   }));
 }

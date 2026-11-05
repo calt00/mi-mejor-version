@@ -20,17 +20,39 @@ export function huevoCentroHTML(estado, { completo = false } = {}) {
 }
 
 /** Efecto al tocar el huevo o la criatura: salta/se mueve y dice algo (sin decir nunca qué es). */
-function reaccionar(contenedor, estado) {
+function reaccionar(contenedor, estado, { burbuja = contenedor, frase = null } = {}) {
   const svg = contenedor.querySelector('svg');
   if (!svg) return;
   svg.classList.remove('tocado'); void svg.getBoundingClientRect(); svg.classList.add('tocado');
   navigator.vibrate?.(estado?.eclosionado ? 18 : [14, 40, 14]);
-  contenedor.querySelector('.huevo-frase')?.remove();
+  burbuja.querySelector('.huevo-frase')?.remove();
   const g = document.createElement('div');
   g.className = 'huevo-frase';
-  g.textContent = estado ? fraseAlTocar(estado) : 'Toca para elegir tu huevo.';
-  contenedor.appendChild(g);
+  g.textContent = frase || (estado ? fraseAlTocar(estado) : 'Toca para elegir tu huevo.');
+  burbuja.appendChild(g);
   setTimeout(() => g.remove(), 2600);
+}
+
+// Al marcar algo como hecho se avisa aquí; «Hoy» se vuelve a pintar y entonces el huevo reacciona.
+let reaccionPedida = 0;
+export const pedirReaccion = () => { reaccionPedida = Date.now(); };
+
+const AGRADECE_HUEVO = ['¡Lo has calentado un poquito!', 'Algo se movió dentro… ¡gracias!', 'Late más fuerte gracias a ti.', 'Se acurruca en su calor.'];
+const AGRADECE_CRIATURA = ['¡Da un saltito de alegría!', 'Te mira orgulloso.', '¡Bate las alas contento!', 'Hace un sonidito feliz.'];
+
+/** Tras pintar «Hoy»: si acabas de marcar algo, el huevo (o tu compañero) reacciona; si has completado el día, lo festeja. */
+export function aplicarReaccion(root, estado, { completo = false } = {}) {
+  const reciente = Date.now() - reaccionPedida < 8000;
+  reaccionPedida = 0;
+  const huevo = root.querySelector('#huevo');
+  if (!reciente || !huevo) return;
+  const lista = estado?.eclosionado ? AGRADECE_CRIATURA : AGRADECE_HUEVO;
+  const frase = completo ? (estado?.eclosionado ? '¡Día completo! Está felicísimo. 🎉' : '¡Día completo! El huevo brilla de calor. 🔥') : lista[Math.floor(Math.random() * lista.length)];
+  const hero = root.querySelector('.hero-dia') || huevo;
+  setTimeout(() => {
+    reaccionar(huevo, estado, { burbuja: hero, frase });
+    if (completo) { hero.insertAdjacentHTML('beforeend', chispas()); setTimeout(() => hero.querySelector('.chispas')?.remove(), 1800); }
+  }, 250);
 }
 
 /** Conecta el huevo del círculo: tocarlo abre su pantalla (o la de elegir uno). */
