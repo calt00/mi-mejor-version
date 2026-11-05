@@ -1,11 +1,13 @@
 // Prepara el horario y lo envía al Atajo de iOS que crea Recordatorios y Alarmas.
-import { db } from './db.js';
+import { db, kvGet } from './db.js';
 import { getSettings, getIngresos } from './datos.js';
-import { hoyISO, addDays, isoLocal, nowMin, toMin, fmtEur, parseISODate, toISODate, daysInMonth } from './util.js';
+import { hoyISO, addDays, isoLocal, nowMin, toMin, toHHMM, fmtEur, parseISODate, toISODate, daysInMonth } from './util.js';
 import { ordenarBloques } from './scheduler.js';
 import { frasesLocales } from './frases.js';
 import { frasesDeHabito } from './habitos.js';
 import { estadoMeta } from './finanzas.js';
+import { acostarObjetivo } from './sueno.js';
+import { tipoTurno } from './interprete.js';
 
 export const LISTA_RECORDATORIOS = 'Mi Mejor Versión';
 
@@ -55,6 +57,34 @@ async function avisoCobro(desde, hasta) {
   return null;
 }
 
+/**
+ * Un aviso cada noche, 30 minutos antes de la hora de acostarte que marca el plan de sueño.
+ * La hora de acostarse depende del turno de mañana (el que manda cuándo hay que madrugar).
+ * Si el aviso cae pasada la medianoche y fuera del rango que se envía, se adelanta a las 23:30 de ese día.
+ */
+export function avisosSueno({ plan, turnos, desde, hasta, hoy, ahora }) {
+  if (!plan?.perfiles?.length) return [];
+  const out = [];
+  for (let f = desde; f <= hasta; f = addDays(f, 1)) {
+    const clave = turnos ? tipoTurno(turnos, addDays(f, 1)) : 'general';
+    const o = acostarObjetivo(plan, clave, f);
+    if (!o) continue;
+    // Minutos desde las 00:00 de `f`: acostarse de madrugada es «pasadas las 24:00»; en el turno de noche se duerme de día, ya en el día siguiente.
+    const m = toMin(o.acostar);
+    const acostarAbs = clave === 'noche' ? m + 1440 : m < 360 ? m + 1440 : m;
+    let aviso = acostarAbs - 30, fecha = addDays(f, Math.floor(aviso / 1440));
+    if (fecha > hasta) { fecha = f; aviso = 23 * 60 + 30; }
+    const inicio = aviso % 1440;
+    if (fecha === hoy && inicio <= ahora) continue;
+    out.push({
+      fecha, inicio: toHHMM(inicio), fin: toHHMM(Math.min(inicio + 5, 1439)), importante: false, sueno: true,
+      titulo: `😴 Prepárate para dormir: a las ${o.acostar} a la cama`,
+      frase: o.alDia ? 'Pantallas fuera y luces bajas. Dormir bien es parte del plan.' : `Semana ${o.semana} de ${o.total} de tu plan de sueño. Pantallas fuera y luces bajas.`,
+    });
+  }
+  return out;
+}
+
 // Bloques pendientes del rango (sin los que ya han pasado) + aviso de cobro.
 export async function prepararEnvio(tipo) {
   const [desde, hasta] = rango(tipo);
@@ -64,8 +94,10 @@ export async function prepararEnvio(tipo) {
   await asignarFrases(bloques);
   const cobro = await avisoCobro(desde, hasta);
   if (cobro) cobro.frase = (await frasesLocales(1))[0];
+  const [plan, turnos] = await Promise.all([kvGet('planSueno'), kvGet('turnos')]);
+  const sueno = avisosSueno({ plan, turnos, desde, hasta, hoy, ahora });
   const { nombreAtajo } = await getSettings();
-  return { desde, hasta, nombreAtajo, bloques: cobro ? ordenarBloques([...bloques, cobro]) : bloques };
+  return { desde, hasta, nombreAtajo, bloques: ordenarBloques([...bloques, ...(cobro ? [cobro] : []), ...sueno]) };
 }
 
 export function construirPayload({ desde, hasta, bloques }) {
@@ -74,7 +106,7 @@ export function construirPayload({ desde, hasta, bloques }) {
     desde: isoLocal(desde, '00:00'),
     hasta: isoLocal(addDays(hasta, 1), '00:00'),
     bloques: bloques.map(b => ({
-      titulo: `⏰ ${b.titulo}`,
+      titulo: b.sueno ? b.titulo : `⏰ ${b.titulo}`,
       frase: b.frase || '',
       inicio: isoLocal(b.fecha, b.inicio),
       fin: isoLocal(b.fecha, b.fin),

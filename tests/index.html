@@ -20,7 +20,7 @@
     import { resumenMes, estadoMeta, recomendaciones, regla503020, evaluarReto } from '../js/finanzas.js';
     import { etapa, escala } from '../js/cerdito.js';
     import { miniMarkdown, toMin, addDays, weekStart, hoyISO, weekday } from '../js/util.js';
-    import { construirPayload } from '../js/iphone.js';
+    import { construirPayload, avisosSueno } from '../js/iphone.js';
     import { progresoDiario, mediaMovil, mejorRacha, resumenSemana, semanaPendiente, inicioHabito, resumenDia, ideasDia, diaPendiente } from '../js/progreso.js';
     import { logrosCumplidos, LOGROS } from '../js/logros.js';
     import { dormirMin, valorarSueno, planSueno, analizarSueno, acostarObjetivo, consejosSueno } from '../js/sueno.js';
@@ -345,6 +345,19 @@
       const despues = libresDe(e, '2026-11-05').turnos.disponibilidad.tarde[0];
       igual(JSON.stringify(antes) !== JSON.stringify(despues), true, 'levantarse más tarde cambia las franjas libres');
       igual(despues[0].inicio >= '11:45', true, 'no hay tiempo libre antes de levantarse');
+    });
+
+    prueba('Aviso de sueño: 30 minutos antes de acostarte, y de madrugada se adelanta al fuera de rango', () => {
+      const plan = { inicio: '2026-11-02', perfiles: [{ clave: 'general', acostar: '23:30', plan: { pasos: [{ acostar: '23:00' }] } }] };
+      const base = { plan, turnos: null, desde: '2026-11-05', hasta: '2026-11-06', hoy: '2026-11-05', ahora: 600 };
+      const a = avisosSueno(base);
+      igual(a.length, 2); igual(a[0].inicio, '22:30'); igual(a[0].fecha, '2026-11-05'); igual(a[0].titulo.includes('23:00'), true);
+      igual(avisosSueno({ ...base, ahora: 23 * 60 }).length, 1, 'el de hoy ya ha pasado');
+      igual(avisosSueno({ ...base, plan: null }).length, 0, 'sin plan, nada');
+      const tarde = { inicio: '2026-11-02', perfiles: [{ clave: 'general', acostar: '01:30', plan: { pasos: [{ acostar: '01:30' }] } }] };
+      const b = avisosSueno({ ...base, plan: tarde });
+      igual(b[0].fecha, '2026-11-06'); igual(b[0].inicio, '01:00', 'cae dentro del rango: madrugada del día siguiente');
+      igual(b[1].fecha, '2026-11-06'); igual(b[1].inicio, '23:30', 'el último cae fuera del rango: se adelanta a las 23:30');
     });
 
     prueba('Logros: se cumplen con los datos justos', () => {
