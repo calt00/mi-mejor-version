@@ -1,5 +1,6 @@
 // Cálculos de progreso: % del día cumplido, medias, rachas y resumen semanal (sin IA).
 import { addDays, toMin, weekDates, weekStart, weekday, sum, fmtEur } from './util.js';
+import { mejorRachaDe } from './rachas.js';
 
 const minutos = b => toMin(b.fin) - toMin(b.inicio);
 
@@ -60,15 +61,7 @@ export function horasPorObjetivo(goals, blocks, desde, hasta, dias) {
   })).filter(x => x.hechoMin || x.objetivoMin).sort((a, b) => b.hechoMin - a.hechoMin);
 }
 
-export function mejorRacha(h) {
-  const dias = [...new Set(h.registros)].sort();
-  let mejor = 0, actual = 0;
-  dias.forEach((d, i) => {
-    actual = i && addDays(dias[i - 1], 1) === d ? actual + 1 : 1;
-    mejor = Math.max(mejor, actual);
-  });
-  return mejor;
-}
+export const mejorRacha = (h, libres) => mejorRachaDe(h.registros, libres);
 
 /**
  * Números de la semana que empieza en `lunes`, para la revisión semanal.

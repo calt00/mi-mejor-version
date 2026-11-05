@@ -7,14 +7,11 @@ import { esImportante } from '../scheduler.js';
 import { abrirFoco } from './foco.js';
 import { marcarBloque } from '../rutinas.js';
 import { compromisosDelDia } from '../compromisos.js';
+import { rachaActual } from '../rachas.js';
 
 export const duracionMin = b => toMin(b.fin) - toMin(b.inicio);
 
-export function racha(h, hoy = hoyISO()) {
-  let n = 0, d = h.registros.includes(hoy) ? hoy : addDays(hoy, -1);
-  while (h.registros.includes(d)) { n++; d = addDays(d, -1); }
-  return n;
-}
+export const racha = (h, hoy = hoyISO()) => rachaActual(h.registros, hoy);
 
 export async function datosFinanzas() {
   const [ingresos, fixed, expenses, savingsGoals, contributions, reto, sobrantesRepartidos, inicioApp] = await Promise.all([

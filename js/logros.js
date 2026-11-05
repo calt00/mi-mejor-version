@@ -6,7 +6,7 @@ import { progresoDiario, mejorRacha } from './progreso.js';
 
 const bloquesHechos = d => d.blocks.filter(b => b.hecho).length;
 const ahorrado = d => sum(d.contributions, c => c.importe);
-const rachaMax = d => Math.max(0, ...d.habits.map(mejorRacha));
+const rachaMax = d => Math.max(0, ...d.habits.map(h => mejorRacha(h)));
 
 // d = { blocks, habits, tasks, goals, savingsGoals, contributions, revisiones, serie, hoy }
 export const LOGROS = [

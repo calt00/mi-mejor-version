@@ -24,6 +24,7 @@
     import { progresoDiario, mediaMovil, mejorRacha, resumenSemana, semanaPendiente, inicioHabito, resumenDia, ideasDia, diaPendiente } from '../js/progreso.js';
     import { logrosCumplidos, LOGROS } from '../js/logros.js';
     import { compromisosDelDia } from '../js/compromisos.js';
+import { rachaActual, mejorRachaDe } from '../js/rachas.js';
     import { opinionDiaLibre, diasLibresRecientes, bloquesDeSugerencias, rutinaPara, solapes } from '../js/diasLibres.js';
     import { dormirMin, valorarSueno, planSueno, analizarSueno, acostarObjetivo, consejosSueno, recortarFranjas, acostarAbs, valorarHorario } from '../js/sueno.js';
     import { barrasSVG, calendarioHTML } from '../js/grafica.js';
@@ -509,6 +510,19 @@
       const conExtra = progresoDiario({ ...base, blocks: [...base.blocks, { ...blq(f, true), id: 'x', extra: true }], libres: { [f]: { modo: 'libre' } } })[0];
       igual(conExtra.pct, 100, 'lo que sí se hace de la rutina libre suma');
       igual(progresoDiario({ ...base, libres: { [f]: { modo: 'rutina' } } })[0].pct, 0, 'con rutina, cuenta con normalidad');
+    });
+
+    prueba('Rachas: un día libre no las rompe', () => {
+      const libres = { '2026-11-03': { modo: 'libre' } };
+      const reg = ['2026-11-01', '2026-11-02', '2026-11-04', '2026-11-05'];
+      igual(rachaActual(reg, '2026-11-05', {}), 2, 'sin día libre, el 3 la rompe');
+      igual(rachaActual(reg, '2026-11-05', libres), 4, 'con día libre el 3, la racha sigue');
+      igual(rachaActual(['2026-11-04'], '2026-11-05', libres), 1, 'hoy sin marcar no la rompe');
+      igual(rachaActual(['2026-11-02', '2026-11-04'], '2026-11-04', { '2026-11-03': { modo: 'rutina' } }), 1, 'si haces tu rutina, ese día sí cuenta y hay que marcarlo');
+      igual(mejorRachaDe(reg, {}), 2); igual(mejorRachaDe(reg, libres), 4);
+      igual(mejorRachaDe(['2026-11-01', '2026-11-05'], { '2026-11-02': { modo: 'libre' }, '2026-11-03': { modo: 'libre' }, '2026-11-04': { modo: 'libre' } }), 2, 'varios días libres seguidos tampoco la rompen');
+      igual(mejorRachaDe(['2026-11-01', '2026-11-05'], { '2026-11-02': { modo: 'libre' } }), 1, 'pero un hueco sin cubrir sí');
+      igual(rachaActual([], '2026-11-05', libres), 0);
     });
 
     prueba('Logros: se cumplen con los datos justos', () => {

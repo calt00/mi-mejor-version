@@ -3,6 +3,7 @@
 import { db, kvGet, kvSet } from './db.js';
 import { diasEntre, hoyISO, toMin, toHHMM, uid, weekday } from './util.js';
 import { estadoInicial, libresDe } from './configuracion.js';
+import { fijarDiasLibres } from './rachas.js';
 
 export const MOTIVOS = [['festivo', '🎉 Festivo'], ['vacaciones', '🏖️ Vacaciones'], ['libre', '🙋 Me lo cojo libre'], ['enfermo', '🤒 Estoy enfermo/a']];
 export const MOTIVO_TXT = { festivo: 'festivo', vacaciones: 'vacaciones', libre: 'por tu cuenta', enfermo: 'enfermedad' };
@@ -127,6 +128,7 @@ export async function marcarDiaLibre({ fecha, motivo, modo, items = [], esfuerzo
   await kvSet('dispExtra', dispExtra);
   libres[fecha] = info;
   await kvSet('diasLibres', libres);
+  fijarDiasLibres(libres);
   return info;
 }
 
@@ -137,6 +139,7 @@ export async function quitarDiaLibre(fecha) {
   if (!info) return;
   delete libres[fecha];
   await kvSet('diasLibres', libres);
+  fijarDiasLibres(libres);
   if (info.dispExtra) { const d = await kvGet('dispExtra', {}); delete d[fecha]; await kvSet('dispExtra', d); }
   const extras = (await db.all('blocks')).filter(b => b.fecha === fecha && b.extra && !b.hecho).map(b => b.id);
   if (extras.length) await db.delMany('blocks', extras);

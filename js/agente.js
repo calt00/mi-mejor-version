@@ -7,6 +7,7 @@ import { hoyISO, addDays, weekday, weekStart, toMin, toHHMM, nowMin, fmtFecha, f
 import { normalizar, rangos, horaSuelta, catalogoDe, interpretarTexto, tipoTurno, posicionEnPatron } from './interprete.js';
 import { generarSemana, huecosDia, ordenarBloques } from './scheduler.js';
 import { progresoDiario, mediaSerie, mejorRacha } from './progreso.js';
+import { rachaActual } from './rachas.js';
 import { estadoMeta } from './finanzas.js';
 import { frasesLocales } from './frases.js';
 import { frasesPara } from './iphone.js';
@@ -563,11 +564,7 @@ function tituloLibre(t) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function rachaDe(h, hoy) {
-  let n = 0, d = h.registros.includes(hoy) ? hoy : addDays(hoy, -1);
-  while (h.registros.includes(d)) { n++; d = addDays(d, -1); }
-  return n;
-}
+const rachaDe = (h, hoy) => rachaActual(h.registros, hoy);
 
 // Cambia las horas libres de un solo día y reorganiza esa semana.
 async function cambiarDia(reg, fecha, franjas, hoy, texto) {

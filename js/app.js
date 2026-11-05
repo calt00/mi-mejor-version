@@ -13,6 +13,7 @@ import { mostrarBienvenida } from './views/bienvenida.js';
 import { retomarFoco } from './views/foco.js';
 import { abrirRevisionDiaria } from './views/revision.js';
 import { diaPendiente } from './progreso.js';
+import { fijarDiasLibres } from './rachas.js';
 
 const RUTAS = {
   hoy: { titulo: 'Hoy', vista: hoy },
@@ -70,6 +71,7 @@ async function revisarNoche() {
 async function iniciar() {
   if (!(await kvGet('inicioApp'))) await kvSet('inicioApp', hoyISO());
   await aplicarTema();
+  fijarDiasLibres(await kvGet('diasLibres', {}));
   pedirPersistencia();
   window.addEventListener('hashchange', render);
   window.addEventListener('refrescar', render);
