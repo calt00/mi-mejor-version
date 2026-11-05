@@ -52,6 +52,12 @@ export async function kvGet(key, def = null) {
 }
 export const kvSet = (key, value) => db.put('kv', { id: key, value });
 
+/** Borra TODO lo guardado en este dispositivo (la app queda como recién instalada). */
+export async function borrarTodo() {
+  for (const s of STORES) await db.clear(s);
+  try { localStorage.clear(); sessionStorage.clear(); } catch { /* sin almacenamiento */ }
+}
+
 export async function exportAll() {
   const out = { app: 'mi-mejor-version', version: DB_VERSION, exportado: new Date().toISOString(), datos: {} };
   for (const s of STORES) out.datos[s] = await db.all(s);

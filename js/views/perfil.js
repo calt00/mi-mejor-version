@@ -1,5 +1,5 @@
 // Pantalla «Perfil»: datos personales, ajustes, guías y copia de seguridad.
-import { exportAll, importAll, kvGet, kvSet } from '../db.js';
+import { exportAll, importAll, borrarTodo, kvGet, kvSet } from '../db.js';
 import { getProfile, saveProfile, getSettings, saveSettings } from '../datos.js';
 import { esc, formData, toast, refrescar, sheet, miniMarkdown, hoyISO, opciones, fmtFecha } from '../util.js';
 import { mostrarBienvenida } from './bienvenida.js';
@@ -60,6 +60,11 @@ export async function render(root) {
         <label class="btn gris chico">⬆️ Importar copia<input type="file" id="importar" accept="application/json,.json" hidden></label>
       </div>
     </div>
+    <div class="card">
+      <h3 style="margin-bottom:6px">🗑️ Empezar de nuevo</h3>
+      <p class="mini">Borra todos tus datos de este iPhone (objetivos, horario, hábitos, ahorro y ajustes) y vuelves a la bienvenida. No se puede deshacer, así que exporta antes una copia.</p>
+      <div class="acciones"><button class="btn peligro chico" id="borrar-todo">Borrar todos mis datos</button></div>
+    </div>
     <div class="card en-pruebas">
       <h3 style="margin-bottom:4px">🧪 En pruebas</h3>
       <p class="mini" style="margin-bottom:10px">Crear el plan escribiendo tu situación con tus palabras, en vez de con las preguntas. Aún no lo entiende todo: lo iremos mejorando. Antes de guardar nada te enseña lo que ha entendido.</p>
@@ -87,6 +92,15 @@ export async function render(root) {
   root.querySelectorAll('[data-guia]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); abrirGuia(b.dataset.guia); }));
   root.querySelector('#exportar').addEventListener('click', async () => { if (await exportar()) refrescar(); });
   root.querySelector('#bienvenida').addEventListener('click', mostrarBienvenida);
+  root.querySelector('#borrar-todo').addEventListener('click', async () => {
+    if (!confirm('Vas a borrar TODOS tus datos de este iPhone: objetivos, horario, hábitos, ahorro y ajustes. ¿Quieres continuar?')) return;
+    if (!confirm('Última comprobación: esto no se puede deshacer. Si no has exportado una copia, cancela y hazla antes. ¿Borrar todo?')) return;
+    try {
+      await borrarTodo();
+      location.hash = '#hoy';
+      location.reload();
+    } catch (err) { toast(`❌ No se pudo borrar: ${err.message}`, 4000); }
+  });
   root.querySelector('#plan').addEventListener('click', () => abrirPlan());
   root.querySelector('#configurar').addEventListener('click', abrirConfigurador);
   root.querySelector('#importar').addEventListener('change', async e => {
