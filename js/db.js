@@ -61,7 +61,7 @@ export async function exportAll() {
 }
 
 export async function importAll(json) {
-  if (json?.app !== 'mi-mejor-version' || !json.datos) throw new Error('El archivo no es una copia de Mi Mejor Versión.');
+  if (json?.app !== 'mi-mejor-version' || !json.datos) throw new Error('El archivo no es una copia de Fénix.');
   for (const s of STORES) {
     await db.clear(s);
     if (Array.isArray(json.datos[s])) await db.putMany(s, json.datos[s]);

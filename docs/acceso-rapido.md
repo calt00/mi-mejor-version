@@ -19,10 +19,10 @@ Así se abre a pantalla completa, como una app normal, y tus datos quedan proteg
 ## 3 · Abrirla con el Botón de Acción o un widget
 
 1. Abre **Atajos** → **+** → busca la acción **Abrir app** y añádela.
-2. Pulsa **App** y busca **Mejor Versión**.
-   - Si aparece, elígela, llama al atajo **Abrir Mi Mejor Versión** y guárdalo.
+2. Pulsa **App** y busca **Fénix**.
+   - Si aparece, elígela, llama al atajo **Abrir Fénix** y guárdalo.
    - Si no aparece, usa el icono del Dock: es igual de rápido.
-3. **Botón de Acción**: **Ajustes → Botón de Acción** → desliza hasta **Atajo** → elige **Abrir Mi Mejor Versión**.
+3. **Botón de Acción**: **Ajustes → Botón de Acción** → desliza hasta **Atajo** → elige **Abrir Fénix**.
 4. **Widget**: mantén pulsada la pantalla de inicio → **Editar** → **Añadir widget** → **Atajos** → elige el atajo.
 
 > Importante: no uses la acción «Abrir URL» con la dirección de la app. Eso la abre en Safari, que guarda los datos aparte, y la verías vacía.
@@ -30,3 +30,12 @@ Así se abre a pantalla completa, como una app normal, y tus datos quedan proteg
 ## 4 · Copias de seguridad
 
 Tus datos se guardan solo en tu iPhone. De vez en cuando ve a **Perfil → Copia de seguridad → Exportar copia** y guárdala en **Archivos / iCloud Drive**. Si cambias de móvil, la importas desde el mismo sitio.
+
+## 5 · Si tu icono todavía es el antiguo
+
+El iPhone guarda el nombre y el icono **en el momento de instalar** la app, así que no se actualizan solos. Para ver el logo del fénix:
+
+1. **Primero guarda tus datos**: **Perfil → Copia de seguridad → Exportar copia** y guárdala en **Archivos / iCloud Drive**. *No te saltes este paso: al borrar la app se borran sus datos.*
+2. Mantén pulsado el icono antiguo → **Eliminar app** → **Eliminar de pantalla de inicio**.
+3. Vuelve a instalarla desde Safari (paso 1 de esta guía).
+4. Abre la nueva app → **Perfil → Copia de seguridad → Importar copia** y elige tu archivo.

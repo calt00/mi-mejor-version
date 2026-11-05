@@ -66,7 +66,7 @@ Una app web no puede crear recordatorios ni alarmas por sí sola. Para eso usamo
 
 ## Paso 6 · Pruébalo
 
-1. Abre **Mi Mejor Versión** → **Hoy** → **📲 Enviar al iPhone**.
+1. Abre **Fénix** → **Hoy** → **📲 Enviar al iPhone**.
 2. Elige **Hoy**, **Mañana** o **7 días** y pulsa **Crear en Recordatorios y Alarmas**.
 3. La primera vez, iOS te pedirá permisos: elige **Permitir siempre** (Recordatorios y Reloj).
 4. Abre **Recordatorios → Mi Mejor Versión** y comprueba tus bloques con sus frases.

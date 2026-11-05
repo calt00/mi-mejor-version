@@ -95,7 +95,7 @@ export function animarAportacion(cont, pctAntes, pctDespues) {
 function celebrar(cont, e) {
   const capa = document.createElement('div');
   capa.className = 'celebracion';
-  const colores = ['#ff375f', '#ff9f0a', '#ffcc33', '#34c759', '#30b0c7', '#5856d6', '#af52de'];
+  const colores = ['#ff375f', '#ff9f0a', '#ffcc33', '#ff6a1a', '#e0201b', '#ffd95e', '#34c759'];
   capa.innerHTML = Array.from({ length: 36 }, (_, i) =>
     `<i style="left:${Math.random() * 100}%;background:${colores[i % colores.length]};animation-delay:${Math.random() * 0.4}s;--r:${Math.random() * 720 - 360}deg"></i>`).join('');
   document.body.appendChild(capa);

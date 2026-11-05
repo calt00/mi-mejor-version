@@ -13,7 +13,7 @@ Una app web no puede despertarse sola, así que usamos la app **Atajos** del iPh
 ## Paso 2 · Que abra la app
 
 1. Pulsa **Añadir acción**, busca **Abrir app** y añádela.
-2. Toca **App** y elige **Mejor Versión**.
+2. Toca **App** y elige **Fénix**.
    - Si no aparece, instala antes la app en la pantalla de inicio (mira la guía **Acceso rápido**).
 3. Pulsa **Siguiente**.
 
@@ -27,7 +27,7 @@ Una app web no puede despertarse sola, así que usamos la app **Atajos** del iPh
 
 ## Cómo funciona cada noche
 
-- A la hora elegida se abre **Mi Mejor Versión** y aparece **«Tu día»** con lo bueno, lo pendiente y los consejos.
+- A la hora elegida se abre **Fénix** y aparece **«Tu día»** con lo bueno, lo pendiente y los consejos.
 - Si no se abre sola (por ejemplo, tenías el móvil apagado), no pasa nada: **a partir de las 20:00** verás en **Hoy** una tarjeta **🌙 Revisa tu día**, y también saltará sola la primera vez que abras la app esa noche.
 - La revisión sale **una vez al día**. Si la cierras, puedes volver a abrirla desde la tarjeta de **Hoy**.
 - En domingo, pulsa **📋 Ver mi semana** al final. Esa revisión también se guarda en **Progreso**.

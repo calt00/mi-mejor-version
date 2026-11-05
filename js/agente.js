@@ -440,9 +440,9 @@ const ACCIONES = {
     const bloques = await db.all('blocks');
     const b = ordenarBloques(bloques.filter(x => x.fecha === hoy && !x.hecho && toMin(x.fin) > nowMin()))[0];
     const [frase] = await frasesLocales(1);
-    if (!b) return { texto: `Es normal tener días así. 💜 Hoy no te queda nada pendiente: descansa, que también cuenta. ${frase}` };
+    if (!b) return { texto: `Es normal tener días así. 🧡 Hoy no te queda nada pendiente: descansa, que también cuenta. ${frase}` };
     return {
-      texto: `Es normal tener días así. 💜 No hace falta hacerlo perfecto: **lo importante es no romper la cadena**.\nTe toca «${b.titulo}» a las ${b.inicio}. ¿Lo dejamos en solo 15 minutos? Muchas veces, al empezar, las ganas llegan solas.`,
+      texto: `Es normal tener días así. 🧡 No hace falta hacerlo perfecto: **lo importante es no romper la cadena**.\nTe toca «${b.titulo}» a las ${b.inicio}. ¿Lo dejamos en solo 15 minutos? Muchas veces, al empezar, las ganas llegan solas.`,
       botones: [{ etiqueta: '⏱️ Solo 15 minutos', orden: { tipo: 'mini', bloqueId: b.id } }, { etiqueta: '📅 Pásalo a otro día', orden: { tipo: 'mover', bloqueId: b.id, texto: '' } }],
     };
   },

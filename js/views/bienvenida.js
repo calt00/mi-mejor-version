@@ -28,8 +28,9 @@ export async function mostrarBienvenida() {
 
   const pantalla = {
     hola: () => `
-      <div class="b-ico">🌱</div>
-      <h2>¡Hola! Empieza tu mejor versión</h2>
+      <img class="b-logo" src="icons/icon-192.png" alt="Fénix">
+      <h2>¡Hola! Soy Fénix</h2>
+      <p class="sub" style="margin-top:-6px"><b>Renace cada día.</b></p>
       <p class="sub">Te haré unas preguntas muy rápidas (trabajo, a qué hora descansas y qué quieres conseguir) y te organizo el horario. Solo tienes que tocar botones.</p>
       <label class="campo" style="text-align:left"><span>¿Cómo te llamas? (opcional)</span>
         <input id="b-nombre" value="${esc(datos.nombre)}" placeholder="Tu nombre" autocomplete="given-name"></label>

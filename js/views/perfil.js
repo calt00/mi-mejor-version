@@ -66,12 +66,12 @@ export async function render(root) {
       ${situacion?.texto ? `<p class="mini">Último texto: ${esc(fmtFecha(situacion.fecha, { day: 'numeric', month: 'long' }))}.</p>` : ''}
       <button class="btn gris ancho" id="plan">✍️ Crear el plan con un texto (beta)</button>
     </div>
-    <p class="mini centro" style="margin:20px 0">Mi Mejor Versión · hecha para ti 💜</p>`;
+    <p class="mini centro" style="margin:20px 0">Fénix · renace cada día 🔥</p>`;
 
   root.querySelector('#perfil').addEventListener('submit', async e => {
     e.preventDefault();
     await saveProfile(formData(e.target));
-    toast('Perfil guardado. 💜');
+    toast('Perfil guardado. 🔥');
     refrescar();
   });
 
@@ -122,7 +122,7 @@ export async function exportar() {
   const file = new File([blob], nombre, { type: 'application/json' });
   if (navigator.canShare?.({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: 'Copia de Mi Mejor Versión' });
+      await navigator.share({ files: [file], title: 'Copia de Fénix' });
       await kvSet('ultimaCopia', hoyISO());
       toast('✅ Copia guardada. ¡Datos a salvo!');
       return true;

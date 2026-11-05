@@ -1,4 +1,4 @@
-# Mi Mejor Versión
+# Fénix
 
 App web personal (PWA) para iPhone: objetivos, horario inteligente, asistente propio, ahorro con cerdito evolutivo y recordatorios con frases motivadoras. Gratis, sin servidor y **sin IA externa**: todo funciona sin internet ni claves y los datos se guardan en el propio dispositivo.
 
