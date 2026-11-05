@@ -9,6 +9,9 @@ export const TODOS_LOS_DIAS = [0, 1, 2, 3, 4, 5, 6];
 export function estadoInicial() {
   return {
     trabaja: null,
+    estudia: false, // se puede trabajar y estudiar a la vez
+    estudio: { dias: [0, 1, 2, 3, 4], inicio: '16:00', fin: '20:00' },
+    mejoraSueno: { acepta: null, inicio: '' }, // ¿quiere mejorar su sueño? y desde cuándo
     tipoHorario: 'fijo', // fijo | turnos | variable
     fijo: { dias: [0, 1, 2, 3, 4], tramos: [{ inicio: '09:00', fin: '17:00' }] },
     turnos: {
@@ -46,11 +49,16 @@ const acostarMin = h => { const m = toMin(h); return m < 360 ? m + 1440 : m; };
 
 /** Horarios de trabajo (o estudio) según las respuestas. */
 export function trabajosDe(e) {
-  if (!e.trabaja) return [];
   const t = (r, dias, turno = null) => ({ ...tramo(r.inicio, r.fin), dias: new Set(dias), turno });
-  if (e.tipoHorario === 'turnos') return tiposActivos(e).map(tp => t(e.turnos.tipos[tp], e.turnos.dias, tp));
-  if (e.tipoHorario === 'variable') return e.variable.flatMap((d, i) => (d.activo ? [t(d, [i])] : []));
-  return e.fijo.tramos.map(r => t(r, e.fijo.dias));
+  let lista = [];
+  if (e.trabaja) {
+    if (e.tipoHorario === 'turnos') lista = tiposActivos(e).map(tp => t(e.turnos.tipos[tp], e.turnos.dias, tp));
+    else if (e.tipoHorario === 'variable') lista = e.variable.flatMap((d, i) => (d.activo ? [t(d, [i])] : []));
+    else lista = e.fijo.tramos.map(r => t(r, e.fijo.dias));
+  }
+  // Los estudios ocupan las mismas horas sea cual sea el turno de trabajo.
+  if (e.estudia && e.estudio?.dias?.length) lista.push({ ...t(e.estudio, e.estudio.dias), fijo: true });
+  return lista;
 }
 
 /** Primer día de la racha de trabajo: en «de viernes a martes» el ciclo de turnos empieza el viernes. */
@@ -66,7 +74,7 @@ export function inicioCiclo(dias) {
  */
 export function libresDe(e, hoy) {
   const trabajos = trabajosDe(e);
-  const base = { trabajos, trayecto: e.trabaja ? Number(e.trayecto) || 0 : 0, levantar: toMin(e.levantar), acostar: acostarMin(e.acostar), sinTrabajo: !e.trabaja };
+  const base = { trabajos, trayecto: e.trabaja || e.estudia ? Number(e.trayecto) || 0 : 0, levantar: toMin(e.levantar), acostar: acostarMin(e.acostar), sinTrabajo: !e.trabaja && !e.estudia };
   const tipos = e.trabaja && e.tipoHorario === 'turnos' ? tiposActivos(e) : [];
   // Sueño de cada turno. En el de noche solo cuenta cuándo se levanta: la hora de acostarse depende de cuándo sale.
   const sueñoTipos = Object.fromEntries(tipos.map(tp => {

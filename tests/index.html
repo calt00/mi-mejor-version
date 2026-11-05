@@ -23,7 +23,7 @@
     import { construirPayload, avisosSueno } from '../js/iphone.js';
     import { progresoDiario, mediaMovil, mejorRacha, resumenSemana, semanaPendiente, inicioHabito, resumenDia, ideasDia, diaPendiente } from '../js/progreso.js';
     import { logrosCumplidos, LOGROS } from '../js/logros.js';
-    import { dormirMin, valorarSueno, planSueno, analizarSueno, acostarObjetivo, consejosSueno, recortarFranjas, acostarAbs } from '../js/sueno.js';
+    import { dormirMin, valorarSueno, planSueno, analizarSueno, acostarObjetivo, consejosSueno, recortarFranjas, acostarAbs, valorarHorario } from '../js/sueno.js';
     import { barrasSVG, calendarioHTML } from '../js/grafica.js';
     import { normalizarPlan, cruzarConExistentes, unirFranjas, normalizarTurnos } from '../js/plan.js';
     import { interpretarTexto, tipoTurno } from '../js/interprete.js';
@@ -321,14 +321,14 @@
       igual(p.actual, 360); igual(p.falta, 90); igual(p.pasos.length, 3);
       igual(p.pasos[0].acostar, '00:30'); igual(p.pasos[1].acostar, '00:00'); igual(p.pasos[2].acostar, '23:30'); igual(p.pasos[2].durMin, 450);
       igual(planSueno('23:00', '07:00').pasos.length, 0, 'ya duerme bien');
-      igual(planSueno('04:00', '07:00').pasos.length, 8, 'plan limitado a 8 semanas');
+      igual(planSueno('04:00', '07:00').pasos.length, 6, 'acostarse a las 4 es horario desplazado: se mueve hasta las 23:30');
     });
 
     prueba('Sueño: un perfil por turno y la hora de esta semana del plan', () => {
       const e = estadoInicial(); e.trabaja = true; e.tipoHorario = 'turnos'; e.turnos.tipos.noche.activo = true;
-      e.suenoTurnos.tarde = { levantar: '09:00', acostar: '03:00' }; // 6 h
+      e.suenoTurnos.tarde = { levantar: '07:00', acostar: '01:00' }; // 6 h
       const ps = analizarSueno(e);
-      igual(ps.map(x => x.clave).join(), 'manana,tarde,noche'); igual(ps[1].nivel, 'justo'); igual(ps[1].plan.pasos[0].acostar, '02:30');
+      igual(ps.map(x => x.clave).join(), 'manana,tarde,noche'); igual(ps[1].nivel, 'justo'); igual(ps[1].plan.pasos[0].acostar, '00:30');
       igual(analizarSueno({ ...e, tipoHorario: 'fijo' }).length, 1, 'sin turnos, un solo perfil');
       const guardado = { inicio: '2026-11-02', perfiles: ps };
       igual(acostarObjetivo(guardado, 'tarde', '2026-11-05').semana, 1);
@@ -358,6 +358,45 @@
       const b = avisosSueno({ ...base, plan: tarde });
       igual(b[0].fecha, '2026-11-06'); igual(b[0].inicio, '01:00', 'cae dentro del rango: madrugada del día siguiente');
       igual(b[1].fecha, '2026-11-06'); igual(b[1].inicio, '23:30', 'el último cae fuera del rango: se adelanta a las 23:30');
+    });
+
+    prueba('Sueño: el horario también importa, no solo las horas', () => {
+      igual(valorarHorario('04:00', '12:00').retrasado, true, '8 horas, pero de 4 a 12');
+      igual(valorarHorario('23:30', '07:30').retrasado, false);
+      igual(valorarHorario('01:00', '09:00').retrasado, false, 'a la 1 todavía es razonable');
+      igual(valorarHorario('02:00', '10:00', 'tarde').retrasado, true, 'con turno de tarde se tolera hasta las 2');
+      igual(valorarHorario('01:00', '09:00', 'tarde').retrasado, false);
+      igual(valorarHorario('08:00', '15:00', 'noche').retrasado, false, 'dormir de día en el turno de noche es normal');
+      const p = planSueno('04:00', '12:00'); // 8 h bien contadas, mal colocadas
+      igual(p.tipo, 'horario'); igual(p.pasos.length, 6);
+      igual(p.pasos[0].acostar, '03:15'); igual(p.pasos[0].levantar, '11:15', 'se mueven los dos a la vez');
+      igual(p.pasos[5].acostar, '23:30'); igual(p.pasos[5].levantar, '07:30');
+      igual(p.pasos.every(x => x.durMin === 480), true, 'siempre 8 horas');
+      igual(planSueno('02:00', '10:00', { turno: 'tarde' }).destino.acostar, '00:00', 'meta con turno de tarde: 00:00');
+    });
+
+    prueba('Sueño: el plan empieza el día elegido', () => {
+      const ps = analizarSueno({ ...estadoInicial(), acostar: '04:00', levantar: '12:00' });
+      const g = { inicio: '2026-11-10', perfiles: ps };
+      const antes = acostarObjetivo(g, 'general', '2026-11-05');
+      igual(antes.pendiente, true); igual(antes.acostar, '04:00', 'antes de empezar, sus horas de siempre');
+      igual(acostarObjetivo(g, 'general', '2026-11-10').acostar, '03:15');
+      igual(acostarObjetivo(g, 'general', '2026-11-17').levantar, '10:30');
+    });
+
+    prueba('Estudios: ocupan sus horas aunque no se trabaje', () => {
+      const e = estadoInicial(); e.trabaja = false; e.estudia = true; e.estudio = { dias: [0], inicio: '09:00', fin: '14:00' };
+      const lunes = libresDe(e, '2026-11-05').disponibilidad[0];
+      igual(lunes.every(f => !(toMin(f.inicio) < 840 && toMin(f.fin) > 540)), true, 'ninguna franja libre pisa la clase de 9 a 14');
+      igual(lunes.length > 0, true);
+      const martes = libresDe(e, '2026-11-05').disponibilidad[1];
+      igual(martes.some(f => toMin(f.inicio) < 840 && toMin(f.fin) > 540), true, 'el martes no hay clase');
+    });
+
+    prueba('Estudios y turnos a la vez: los estudios se respetan en todos los turnos', () => {
+      const e = estadoInicial(); e.trabaja = true; e.tipoHorario = 'turnos'; e.estudia = true; e.estudio = { dias: [0, 1, 2, 3, 4], inicio: '16:00', fin: '19:00' };
+      const l = libresDe(e, '2026-11-05').turnos.disponibilidad;
+      for (const tipo of ['manana', 'tarde']) igual(l[tipo][0].every(f => !(toMin(f.inicio) < 1140 && toMin(f.fin) > 960)), true, `turno de ${tipo}: nada libre de 16 a 19`);
     });
 
     prueba('Sueño: el horario deja libre la media hora antes de acostarte', () => {

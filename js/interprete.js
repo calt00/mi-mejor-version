@@ -515,7 +515,7 @@ export function calcularLibres({ trabajos = [], trayecto = 0, levantar = null, a
 // Franjas libres de un día de la semana (d: 0 lunes … 6 domingo) para un turno concreto (o sin turnos).
 function franjasLibres({ d, tipo, compromisos, trabajos, diasTrabajo, turnos, trayecto, sueño, diasDescanso, sinTrabajo }) {
   if (diasDescanso.has(d)) return [];
-  const trabajosHoy = trabajos.filter(c => (turnos ? (c.turno ? c.turno === tipo : true) : true) && c.dias.has(d) && !(turnos && !c.turno && trabajos.some(x => x.turno)));
+  const trabajosHoy = trabajos.filter(c => (turnos ? (c.turno ? c.turno === tipo : true) : true) && c.dias.has(d) && !(turnos && !c.turno && !c.fijo && trabajos.some(x => x.turno)));
   const sinCompromisos = !trabajos.length && !compromisos.length;
   const s = { ...sueño.general, ...(tipo && sueño[tipo]) };
   // Sin horario ni horas de sueño: si no trabaja, mañanas y tardes; si no lo sabemos, tardes y algo más el fin de semana.

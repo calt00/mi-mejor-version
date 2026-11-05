@@ -512,3 +512,7 @@ input[type="checkbox"] { width: auto; }
 .consejos li > span { font-size: 22px; line-height: 1.2; }
 details summary { cursor: pointer; color: var(--accent); }
 .card .switch { padding-left: 0; padding-right: 0; }
+.grid3 .opcion-grande { padding: 14px 4px; font-size: 26px; line-height: 1.2; }
+.grid3 .opcion-grande small { font-size: 13px; font-weight: 700; }
+.card.oferta-sueno { border: 2px solid var(--accent); background: linear-gradient(180deg, var(--accent-soft), transparent 60%), var(--card); }
+.oferta-sueno .opcion-grande { font-size: 15px; padding: 14px 8px; }

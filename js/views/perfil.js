@@ -96,6 +96,7 @@ export async function render(root) {
   root.querySelector('#exportar').addEventListener('click', async () => { if (await exportar()) refrescar(); });
   root.querySelector('#bienvenida').addEventListener('click', mostrarBienvenida);
   root.querySelector('#ver-sueno')?.addEventListener('click', abrirPlanSueno);
+  root.querySelector('#mejorar-sueno')?.addEventListener('click', abrirConfigurador);
   if (root.querySelector('#ver-sueno')) conectarAjustesSueno(root, toast);
   root.querySelector('#borrar-todo').addEventListener('click', async () => {
     if (!confirm('Vas a borrar TODOS tus datos de este iPhone: objetivos, horario, hábitos, ahorro y ajustes. ¿Quieres continuar?')) return;

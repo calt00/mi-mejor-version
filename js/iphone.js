@@ -68,7 +68,7 @@ export function avisosSueno({ plan, turnos, desde, hasta, hoy, ahora, antelacion
   for (let f = desde; f <= hasta; f = addDays(f, 1)) {
     const clave = turnos ? tipoTurno(turnos, addDays(f, 1)) : 'general';
     const o = acostarObjetivo(plan, clave, f);
-    if (!o) continue;
+    if (!o || o.pendiente) continue; // antes de empezar el plan no se molesta
     // Minutos desde las 00:00 de `f`: acostarse de madrugada es «pasadas las 24:00»; en el turno de noche se duerme de día, ya en el día siguiente.
     const cama = clave === 'noche' ? toMin(o.acostar) + 1440 : acostarAbs(o.acostar);
     let aviso = cama - antelacion, fecha = addDays(f, Math.floor(aviso / 1440));
@@ -78,7 +78,7 @@ export function avisosSueno({ plan, turnos, desde, hasta, hoy, ahora, antelacion
     out.push({
       fecha, inicio: toHHMM(inicio), fin: toHHMM(Math.min(inicio + 5, 1439)), importante: alarma, sueno: true,
       titulo: `😴 Prepárate para dormir: a las ${o.acostar} a la cama`,
-      frase: o.alDia ? 'Pantallas fuera y luces bajas. Dormir bien es parte del plan.' : `Semana ${o.semana} de ${o.total} de tu plan de sueño. Pantallas fuera y luces bajas.`,
+      frase: o.alDia ? 'Pantallas fuera y luces bajas. Dormir bien es parte del plan.' : `Semana ${o.semana} de ${o.total} de tu plan de sueño. Mañana, a levantarte sobre las ${o.levantar}. Pantallas fuera y luces bajas.`,
     });
   }
   return out;

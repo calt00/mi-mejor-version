@@ -68,7 +68,10 @@ const lista = (items, vacio) => items.length ? `<ul class="lista">${items.join('
 
 function suenoHTML(s) {
   if (!s) return '';
-  return `<div class="card"><b>😴 Esta noche</b><div class="sub" style="margin-top:4px">${s.alDia ? `Mantén tu hora: acuéstate sobre las <b>${s.acostar}</b>.` : `Acuéstate a las <b>${s.acostar}</b> (semana ${s.semana} de ${s.total} de tu plan de sueño). Pantallas fuera 30 minutos antes.`}</div></div>`;
+  const texto = s.pendiente ? `Tu plan de sueño empieza el ${fmtFecha(s.inicio, { day: 'numeric', month: 'long' })}. Hasta entonces, tus horas de siempre.`
+    : s.alDia ? `Mantén tu hora: acuéstate sobre las <b>${s.acostar}</b>.`
+    : `Acuéstate a las <b>${s.acostar}</b> y mañana levántate a las <b>${s.levantar}</b> (semana ${s.semana} de ${s.total} de tu plan de sueño). Pantallas fuera un rato antes.`;
+  return `<div class="card"><b>😴 Esta noche</b><div class="sub" style="margin-top:4px">${texto}</div></div>`;
 }
 
 function diaHTML(n, r, sueno) {

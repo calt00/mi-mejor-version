@@ -2,7 +2,7 @@
 // Se usa en la bienvenida y, después, desde Horario y Perfil para cambiar las respuestas.
 import { db, kvGet, kvSet } from '../db.js';
 import { getPrefs, savePrefs, getSettings, saveDisponibilidad, saveTurnos, dispPorFecha } from '../datos.js';
-import { esc, sheet, toast, refrescar, hoyISO, addDays, weekStart, weekDates, weekday, fmtHoras, DIAS, DIAS_CORTO } from '../util.js';
+import { esc, sheet, toast, refrescar, hoyISO, addDays, weekStart, weekDates, weekday, fmtHoras, fmtFecha, DIAS, DIAS_CORTO } from '../util.js';
 import { TIPOS_TURNO, estadoDesde, objetivoVacio, tiposActivos, libresDe, minutosLibresPorDia, sesionDe, encaje, maxHorasDiaDe, objetivosDe } from '../configuracion.js';
 import { tipoTurno } from '../interprete.js';
 import { analizarSueno, planParaGuardar, dormirMin, horasTxt as duracionTxt } from '../sueno.js';
@@ -39,6 +39,7 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
   const [guardado, goals] = await Promise.all([kvGet('configuracion'), db.all('goals')]);
   const e = estadoDesde(guardado, goals);
   if (!e.objetivos.length) e.objetivos.push(objetivoVacio());
+  e.mejoraSueno = { acepta: null, inicio: '' }; // cada vez se vuelve a preguntar si quiere mejorar su sueño
   let paso = 0;
   const hoy = hoyISO();
 
@@ -102,16 +103,22 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
         ${e.variable.map((d, i) => `<div class="cfg-dia-var"><button type="button" class="dia-chip ${d.activo ? 'on' : ''}" data-accion="variable-dia" data-valor="${i}">${DIAS_CORTO[i]}</button>
           ${d.activo ? tramoHTML(`variable.${i}`) : `<span class="mini">${DIAS[i]}: libre</span>`}</div>`).join('')}`;
       return `
-        <h2>¿Trabajas o estudias?</h2>
-        <p class="sub">Así sé qué horas tienes ocupadas.</p>
-        <div class="si-no">
-          <button type="button" class="opcion-grande ${e.trabaja === true ? 'activa' : ''}" data-accion="trabaja" data-valor="si">💼 Sí</button>
-          <button type="button" class="opcion-grande ${e.trabaja === false ? 'activa' : ''}" data-accion="trabaja" data-valor="no">🏖️ No</button>
+        <h2>¿Trabajas, estudias o las dos cosas?</h2>
+        <p class="sub">Toca lo que hagas: puedes marcar las dos. Así sé qué horas tienes ocupadas.</p>
+        <div class="grid3">
+          <button type="button" class="opcion-grande ${e.trabaja === true ? 'activa' : ''}" data-accion="ocupacion" data-valor="trabajo" aria-pressed="${e.trabaja === true}">💼<br><small>Trabajo</small></button>
+          <button type="button" class="opcion-grande ${e.estudia ? 'activa' : ''}" data-accion="ocupacion" data-valor="estudio" aria-pressed="${Boolean(e.estudia)}">📚<br><small>Estudios</small></button>
+          <button type="button" class="opcion-grande ${e.trabaja === false && !e.estudia ? 'activa' : ''}" data-accion="ocupacion" data-valor="ninguna" aria-pressed="${e.trabaja === false && !e.estudia}">🏖️<br><small>Ninguna</small></button>
         </div>
         ${e.trabaja ? `
-          <span class="cfg-etiqueta">¿Cómo es tu horario?</span>
+          <span class="cfg-etiqueta">💼 ¿Cómo es tu horario de trabajo?</span>
           ${opcionesHTML('tipo-horario', [['fijo', 'Siempre igual'], ['turnos', 'Turnos rotativos'], ['variable', 'Cambia según el día']], e.tipoHorario)}
-          ${detalle}
+          ${detalle}` : ''}
+        ${e.estudia ? `<div class="card cfg-sub"><b>📚 Tus estudios</b>
+          <span class="cfg-etiqueta">¿Qué días tienes clase?</span>${diasHTML('estudio.dias')}
+          <span class="cfg-etiqueta">¿A qué hora?</span>${tramoHTML('estudio')}
+          <p class="mini" style="margin:8px 0 0">Si tienes clases a horas distintas según el día, pon el tramo más amplio: siempre es mejor que te sobre tiempo.</p></div>` : ''}
+        ${e.trabaja || e.estudia ? `
           <span class="cfg-etiqueta">¿Cuánto tardas en llegar?</span>
           ${opcionesHTML('trayecto', TRAYECTOS.map(m => [m, m ? `${m} min` : 'Nada']), e.trayecto)}` : ''}`;
     },
@@ -119,10 +126,31 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
     descanso() {
       const total = libresDia().reduce((a, m) => a + m, 0);
       const turnos = e.trabaja && e.tipoHorario === 'turnos';
+      const ocupado = e.trabaja || e.estudia;
       const duerme = (a, l) => `<span class="mini">😴 ${duracionTxt(dormirMin(a, l))}</span>`;
+      const perfiles = analizarSueno(e);
+      const M = e.mejoraSueno;
+      const inicio = M.inicio || hoy;
+      const hayMejora = perfiles.some(p => p.plan.pasos.length);
+      const corta = f => fmtFecha(f, { day: 'numeric', month: 'short' });
+      const lunes = addDays(weekStart(hoy), 7);
+      const fechas = [[hoy, 'Hoy'], [addDays(hoy, 1), 'Mañana'], [lunes, `El lunes (${corta(lunes)})`]];
+      const oferta = !hayMejora ? '' : `<div class="card oferta-sueno">
+        <b>🌟 ¿Quieres mejorar tu sueño?</b>
+        <p class="sub" style="margin:4px 0 8px">Si aceptas, adapto tu horario <b>poco a poco</b>, sin cambios bruscos y como recomiendan los expertos. Te iré diciendo cada semana a qué hora acostarte y levantarte.</p>
+        <div class="si-no">
+          <button type="button" class="opcion-grande ${M.acepta === true ? 'activa' : ''}" data-accion="sueno-acepta" data-valor="si">✅ Sí, quiero mejorarlo</button>
+          <button type="button" class="opcion-grande ${M.acepta === false ? 'activa' : ''}" data-accion="sueno-acepta" data-valor="no">Ahora no</button>
+        </div>
+        ${M.acepta === true ? `<span class="cfg-etiqueta">¿Cuándo quieres empezar?</span>
+          <div class="opciones-chip">${fechas.map(([f, t]) => `<button type="button" class="chip ${inicio === f ? 'activa' : ''}" data-accion="sueno-inicio" data-valor="${f}">${t}</button>`).join('')}</div>
+          <label class="campo" style="margin-top:10px"><span>O elige otro día</span><input type="date" value="${inicio}" min="${hoy}" data-campo="mejoraSueno.inicio"></label>
+          <p class="encaje ok">Empiezas el <b>${esc(fmtFecha(inicio, { weekday: 'long', day: 'numeric', month: 'long' }))}</b>. Hasta entonces, todo sigue igual.</p>` : ''}
+        ${M.acepta === false ? '<p class="mini">Vale, dejo tus horas como están. Si cambias de idea, lo encuentras en Perfil → Tu sueño.</p>' : ''}
+      </div>`;
       return `
         <h2>¿A qué hora te levantas y te acuestas?</h2>
-        <p class="sub">${turnos ? 'Con turnos no se duerme igual cada semana: dime tus horas normales en cada turno.' : e.trabaja ? 'Normalmente, los días que no trabajas. Los días de trabajo lo ajusto yo a tu horario.' : 'Normalmente, un día cualquiera.'}</p>
+        <p class="sub">${turnos ? 'Con turnos no se duerme igual cada semana: dime tus horas normales en cada turno.' : ocupado ? 'Normalmente, los días que no tienes que madrugar. Los días de trabajo o clase lo ajusto yo a tu horario.' : 'Normalmente, un día cualquiera.'}</p>
         ${turnos ? tiposActivos(e).map(k => `<div class="card cfg-sub"><b>Turno de ${TURNO_TXT[k].toLowerCase()}</b>
           <p class="mini" style="margin:2px 0 8px">${k === 'noche' ? 'Cuando duermes de día, después de salir del trabajo.' : k === 'manana' ? 'Los días que madrugas para entrar.' : 'Los días que entras por la tarde.'}</p>
           <div class="grid2">
@@ -135,9 +163,10 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
           <label class="campo"><span>🌙 Me acuesto</span>${hora('acostar', 'Me acuesto')}</label>
         </div>
         ${turnos ? '' : duerme(e.acostar, e.levantar)}
-        <div class="nota" style="margin-top:12px">🕒 Quitando ${e.trabaja ? 'el trabajo, el trayecto, ' : ''}las comidas y un rato para descansar, te quedan unas <b>${fmtHoras(total)} libres a la semana</b>${libres().turnos ? ' (en la semana de turno que menos deja)' : ''}.</div>
+        <div class="nota" style="margin-top:12px">🕒 Quitando ${e.trabaja && e.estudia ? 'el trabajo, los estudios, el trayecto, ' : e.trabaja ? 'el trabajo, el trayecto, ' : e.estudia ? 'los estudios, el trayecto, ' : ''}las comidas y un rato para descansar, te quedan unas <b>${fmtHoras(total)} libres a la semana</b>${libres().turnos ? ' (en la semana de turno que menos deja)' : ''}.</div>
         <span class="cfg-etiqueta">Tu sueño</span>
-        ${analizarSueno(e).map(p => perfilSuenoHTML(p)).join('')}`;
+        ${perfiles.map(p => perfilSuenoHTML(p, { mostrarPlan: M.acepta === true, inicio: M.acepta === true ? inicio : null })).join('')}
+        ${oferta}`;
     },
 
     objetivos() {
@@ -191,10 +220,16 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
   function validar() {
     const id = PASOS[paso][0];
     if (id === 'trabajo') {
-      if (e.trabaja == null) return 'Dime si trabajas o estudias.';
+      if (e.trabaja == null) return 'Toca si trabajas, estudias o ninguna de las dos.';
+      if (e.estudia && !e.estudio.dias.length) return 'Elige qué días tienes clase.';
       if (e.trabaja && e.tipoHorario === 'fijo' && !e.fijo.dias.length) return 'Elige qué días trabajas.';
       if (e.trabaja && e.tipoHorario === 'turnos' && (!e.turnos.dias.length || !tiposActivos(e).length)) return 'Elige tus días de trabajo y al menos un turno.';
       if (e.trabaja && e.tipoHorario === 'variable' && !e.variable.some(d => d.activo)) return 'Toca al menos un día de trabajo.';
+    }
+    if (id === 'descanso') {
+      const hay = analizarSueno(e).some(p => p.plan.pasos.length);
+      if (hay && e.mejoraSueno.acepta == null) return 'Dime si quieres mejorar tu sueño (o toca «Ahora no»).';
+      if (hay && e.mejoraSueno.acepta && (e.mejoraSueno.inicio || hoy) < hoy) return 'Elige hoy o un día que aún no haya pasado.';
     }
     if (id === 'objetivos') {
       const con = e.objetivos.filter(o => o.titulo.trim());
@@ -219,7 +254,14 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
   }
 
   const ACCIONES = {
-    trabaja: v => { e.trabaja = v === 'si'; },
+    ocupacion: v => {
+      if (v === 'ninguna') { e.trabaja = false; e.estudia = false; }
+      else if (v === 'trabajo') { e.trabaja = !e.trabaja; }
+      else { e.estudia = !e.estudia; if (e.trabaja == null) e.trabaja = false; }
+      if (v === 'trabajo' && e.estudia == null) e.estudia = false;
+    },
+    'sueno-acepta': v => { e.mejoraSueno.acepta = v === 'si'; if (v === 'si' && !e.mejoraSueno.inicio) e.mejoraSueno.inicio = hoy; },
+    'sueno-inicio': v => { e.mejoraSueno.inicio = v; },
     'tipo-horario': v => { e.tipoHorario = v; },
     trayecto: v => { e.trayecto = Number(v); },
     dia: (v, b) => { const lista = leer(e, b.dataset.ruta), d = Number(v); escribir(e, b.dataset.ruta, lista.includes(d) ? lista.filter(x => x !== d) : [...lista, d].sort((x, y) => x - y)); },
@@ -286,7 +328,10 @@ async function guardarTodo(e) {
   await saveDisponibilidad(libres.disponibilidad);
   await saveTurnos(libres.turnos);
   await savePrefs({ ...(await getPrefs()), descansoMin: 10, maxHorasDia: maxHorasDiaDe(guardar) });
-  await kvSet('planSueno', planParaGuardar(analizarSueno(e), hoy));
+  // El plan de sueño solo existe si la persona ha dicho que sí y hay algo que mejorar; empieza el día que ella elige.
+  const perfilesSueno = analizarSueno(e);
+  const quiereMejorar = e.mejoraSueno?.acepta === true && perfilesSueno.some(p => p.plan.pasos.length);
+  await kvSet('planSueno', quiereMejorar ? planParaGuardar(perfilesSueno, e.mejoraSueno.inicio || hoy) : null);
   await db.putMany('goals', [...guardar, ...archivar]);
   if (tareas.length) await db.putMany('tasks', tareas);
 
