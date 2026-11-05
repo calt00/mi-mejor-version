@@ -13,7 +13,7 @@ export const RITMO_HORARIO = 45;    // minutos por semana al mover el horario (�
 const MAX_SEMANAS = 12;
 
 /** Ajustes de los avisos y del horario: minutos de antelación, si suena como alarma y si el horario sigue el plan. */
-export const AJUSTES_SUENO = { antelacion: 30, alarma: false, ajustarHorario: true };
+export const AJUSTES_SUENO = { antelacion: 30, alarma: false, ajustarHorario: true, alarmaDespertar: true };
 
 /** Hora de acostarse en minutos desde las 00:00 del día: de madrugada cuenta como «pasadas las 24:00». */
 export const acostarAbs = hhmm => { const m = toMin(hhmm); return m < 360 ? m + 1440 : m; };

@@ -5,11 +5,11 @@ import { esc, formData, toast, refrescar, sheet, miniMarkdown, hoyISO, opciones,
 import { mostrarBienvenida } from './bienvenida.js';
 import { abrirPlan } from './plan.js';
 import { abrirConfigurador } from './configurar.js';
-import { tarjetaSuenoHTML, abrirPlanSueno, conectarAjustesSueno } from './sueno.js';
+import { tarjetaSuenoHTML, abrirPlanSueno, conectarAjustesSueno, tarjetaDespertarHTML, conectarDespertar } from './sueno.js';
 
 export async function render(root) {
   const [p, s, ultimaCopia, situacion] = await Promise.all([getProfile(), getSettings(), kvGet('ultimaCopia'), kvGet('miSituacion')]);
-  const suenoTarjeta = await tarjetaSuenoHTML();
+  const suenoTarjeta = (await tarjetaDespertarHTML()) + (await tarjetaSuenoHTML());
   let persistente = null;
   try { persistente = await navigator.storage?.persisted?.(); } catch { /* sin soporte */ }
   const instalada = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
@@ -95,6 +95,7 @@ export async function render(root) {
   root.querySelectorAll('[data-guia]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); abrirGuia(b.dataset.guia); }));
   root.querySelector('#exportar').addEventListener('click', async () => { if (await exportar()) refrescar(); });
   root.querySelector('#bienvenida').addEventListener('click', mostrarBienvenida);
+  conectarDespertar(root, toast);
   root.querySelector('#ver-sueno')?.addEventListener('click', abrirPlanSueno);
   root.querySelector('#mejorar-sueno')?.addEventListener('click', abrirConfigurador);
   if (root.querySelector('#ver-sueno')) conectarAjustesSueno(root, toast);

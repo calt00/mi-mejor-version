@@ -4,6 +4,7 @@ Una app web no puede crear recordatorios ni alarmas por sí sola. Para eso usamo
 
 - Cada bloque de tu horario se crea como **recordatorio** en la lista **«Mi Mejor Versión»**, con su **frase motivadora** en las notas.
 - Los bloques **importantes (⏰)** crean además una **alarma** del Reloj, que suena aunque tengas el móvil en silencio.
+- Cada día se crea una **alarma «☀️ Levántate»** a la hora de levantarte que ves en tu horario (se puede quitar en Perfil → ☀️ Alarma para levantarte). Los días libres no suena.
 - Si tienes un **plan de sueño** (Perfil → 😴 Tu sueño), cada noche se crea un recordatorio **«😴 Prepárate para dormir»** 30 minutos antes de la hora de acostarte que marca tu plan.
 - Si vuelves a enviar el mismo día, los recordatorios pendientes de esas fechas se **sustituyen**, sin duplicados.
 

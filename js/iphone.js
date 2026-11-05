@@ -8,6 +8,7 @@ import { frasesDeHabito } from './habitos.js';
 import { estadoMeta } from './finanzas.js';
 import { acostarObjetivo, acostarAbs, AJUSTES_SUENO } from './sueno.js';
 import { tipoTurno } from './interprete.js';
+import { compromisosDelDia } from './compromisos.js';
 
 export const LISTA_RECORDATORIOS = 'Mi Mejor Versión';
 
@@ -84,6 +85,22 @@ export function avisosSueno({ plan, turnos, desde, hasta, hoy, ahora, antelacion
   return out;
 }
 
+/**
+ * Una alarma cada día a la hora de levantarte (la que se ve en el horario). Los días libres no suenan, y las de hoy
+ * que ya han pasado se dejan fuera.
+ */
+export function avisosDespertar({ config, turnos, libres = {}, plan = null, desde, hasta, hoy, ahora }) {
+  const out = [];
+  if (!config) return out;
+  for (let f = desde; f <= hasta; f = addDays(f, 1)) {
+    if (libres[f]) continue;
+    const c = compromisosDelDia({ config, turnos, fecha: f, libres, plan }).find(x => x.tipo === 'despertar');
+    if (!c || (f === hoy && toMin(c.inicio) <= ahora)) continue;
+    out.push({ fecha: f, inicio: c.inicio, fin: toHHMM(Math.min(toMin(c.inicio) + 5, 1439)), titulo: '☀️ Levántate', frase: 'Empieza el día con calma: un vaso de agua y luz natural.', importante: true, despertar: true });
+  }
+  return out;
+}
+
 // Bloques pendientes del rango (sin los que ya han pasado) + aviso de cobro.
 export async function prepararEnvio(tipo) {
   const [desde, hasta] = rango(tipo);
@@ -93,11 +110,12 @@ export async function prepararEnvio(tipo) {
   await asignarFrases(bloques);
   const cobro = await avisoCobro(desde, hasta);
   if (cobro) cobro.frase = (await frasesLocales(1))[0];
-  const [plan, turnos] = await Promise.all([kvGet('planSueno'), kvGet('turnos')]);
+  const [plan, turnos, config, libres] = await Promise.all([kvGet('planSueno'), kvGet('turnos'), kvGet('configuracion'), kvGet('diasLibres', {})]);
   const ajustes = await getAjustesSueno();
+  const despertar = ajustes.alarmaDespertar ? avisosDespertar({ config, turnos, libres, plan, desde, hasta, hoy, ahora }) : [];
   const sueno = avisosSueno({ plan, turnos, desde, hasta, hoy, ahora, antelacion: Number(ajustes.antelacion) || 30, alarma: Boolean(ajustes.alarma) });
   const { nombreAtajo } = await getSettings();
-  return { desde, hasta, nombreAtajo, bloques: ordenarBloques([...bloques, ...(cobro ? [cobro] : []), ...sueno]) };
+  return { desde, hasta, nombreAtajo, bloques: ordenarBloques([...bloques, ...(cobro ? [cobro] : []), ...sueno, ...despertar]) };
 }
 
 export function construirPayload({ desde, hasta, bloques }) {
@@ -106,7 +124,7 @@ export function construirPayload({ desde, hasta, bloques }) {
     desde: isoLocal(desde, '00:00'),
     hasta: isoLocal(addDays(hasta, 1), '00:00'),
     bloques: bloques.map(b => ({
-      titulo: b.sueno ? b.titulo : `⏰ ${b.titulo}`,
+      titulo: b.sueno || b.despertar ? b.titulo : `⏰ ${b.titulo}`,
       frase: b.frase || '',
       inicio: isoLocal(b.fecha, b.inicio),
       fin: isoLocal(b.fecha, b.fin),

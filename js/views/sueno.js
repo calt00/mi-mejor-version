@@ -76,6 +76,7 @@ export async function abrirPlanSueno() {
 export function conectarAjustesSueno(root, avisar) {
   const guardar = async () => {
     await kvSet('ajustesSueno', {
+      ...(await getAjustesSueno()),
       antelacion: Number(root.querySelector('#sueno-ant').value),
       alarma: root.querySelector('#sueno-alarma').checked,
       ajustarHorario: root.querySelector('#sueno-ajustar').checked,
@@ -83,4 +84,21 @@ export function conectarAjustesSueno(root, avisar) {
     avisar('✅ Ajustes de sueño guardados');
   };
   root.querySelectorAll('#sueno-ant, #sueno-alarma, #sueno-ajustar').forEach(el => el.addEventListener('change', guardar));
+}
+
+/** Tarjeta de «Perfil»: alarma diaria a la hora de levantarte (se crea al pulsar «Enviar al iPhone»). */
+export async function tarjetaDespertarHTML() {
+  const aj = await getAjustesSueno();
+  return `<div class="card">
+    <h3 style="margin-bottom:6px">☀️ Alarma para levantarte</h3>
+    <label class="switch"><span>Crear una alarma cada día a mi hora de levantarme</span><input type="checkbox" id="alarma-despertar" ${aj.alarmaDespertar ? 'checked' : ''}></label>
+    <p class="mini">Se crea en el Reloj del iPhone cuando pulsas «Enviar al iPhone». Los días libres no suena.</p>
+  </div>`;
+}
+
+export function conectarDespertar(root, avisar) {
+  root.querySelector('#alarma-despertar')?.addEventListener('change', async ev => {
+    await kvSet('ajustesSueno', { ...(await getAjustesSueno()), alarmaDespertar: ev.target.checked });
+    avisar(ev.target.checked ? '⏰ Alarma de levantarte activada' : 'Alarma de levantarte desactivada');
+  });
 }

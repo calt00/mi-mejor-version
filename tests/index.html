@@ -20,7 +20,7 @@
     import { resumenMes, estadoMeta, recomendaciones, regla503020, evaluarReto } from '../js/finanzas.js';
     import { etapa, escala } from '../js/cerdito.js';
     import { miniMarkdown, toMin, addDays, weekStart, hoyISO, weekday } from '../js/util.js';
-    import { construirPayload, avisosSueno } from '../js/iphone.js';
+    import { construirPayload, avisosSueno, avisosDespertar } from '../js/iphone.js';
     import { progresoDiario, mediaMovil, mejorRacha, resumenSemana, semanaPendiente, inicioHabito, resumenDia, ideasDia, diaPendiente } from '../js/progreso.js';
     import { logrosCumplidos, LOGROS } from '../js/logros.js';
     import { compromisosDelDia } from '../js/compromisos.js';
@@ -447,6 +447,16 @@
       const t = { ...estadoInicial(), trabaja: true, tipoHorario: 'turnos', trayecto: 30 };
       const turnos = libresDe({ ...t, turnos: { ...t.turnos, actual: 'manana' } }, '2026-11-02').turnos;
       igual(compromisosDelDia({ config: t, turnos, fecha: '2026-11-03' }).find(c => c.tipo === 'despertar').inicio, t.suenoTurnos[turnos.patron[0]].levantar, 'con turnos, la hora de ese turno');
+    });
+
+    prueba('Alarma de levantarte: una cada día, sin días libres ni las que ya pasaron', () => {
+      const config = { ...estadoInicial(), trabaja: true, tipoHorario: 'fijo', fijo: { dias: [0, 1, 2, 3, 4], tramos: [{ inicio: '09:00', fin: '17:00' }] }, trayecto: 30, levantar: '08:00' };
+      const base = { config, turnos: null, desde: '2026-11-05', hasta: '2026-11-07', hoy: '2026-11-05', ahora: 300 };
+      const a = avisosDespertar(base);
+      igual(a.length, 3); igual(a[0].inicio, '08:00'); igual(a[0].importante, true, 'suena como alarma'); igual(a[0].despertar, true);
+      igual(avisosDespertar({ ...base, ahora: 8 * 60 }).length, 2, 'la de hoy ya ha pasado');
+      igual(avisosDespertar({ ...base, libres: { '2026-11-06': { modo: 'libre' } } }).map(x => x.fecha).join(), '2026-11-05,2026-11-07', 'un día libre no suena');
+      igual(avisosDespertar({ ...base, config: null }).length, 0, 'sin cuestionario no se sabe la hora');
     });
 
     prueba('Horario: el turno de noche acaba al día siguiente y la vuelta cae en la mañana', () => {
