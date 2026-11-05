@@ -1,6 +1,6 @@
 // «Día libre»: ¿seguro?, qué opinan los expertos, qué hacer ese día y una rutina provechosa si se quiere.
-import { esc, sheet, toast, refrescar, fmtFecha } from '../util.js';
-import { MOTIVOS, MOTIVO_TXT, getDiasLibres, diasLibresRecientes, opinionDiaLibre, sugerenciasPara, PREMARCADAS, marcarDiaLibre, quitarDiaLibre } from '../diasLibres.js';
+import { esc, sheet, toast, refrescar, fmtFecha, toMin, toHHMM } from '../util.js';
+import { MOTIVOS, MOTIVO_TXT, NIVELES_ESFUERZO, getDiasLibres, diasLibresRecientes, opinionDiaLibre, rutinaPara, solapes, marcarDiaLibre, quitarDiaLibre } from '../diasLibres.js';
 
 const CLASE_NIVEL = { bien: 'nivel-bien', atencion: 'nivel-justo', exceso: 'nivel-poco' };
 
@@ -8,7 +8,8 @@ export async function abrirDiaLibre(fecha) {
   const libres = await getDiasLibres();
   const existente = libres[fecha];
   const recientes = diasLibresRecientes(libres, fecha);
-  const s = { paso: 1, motivo: existente?.motivo || null, modo: null, quiere: null, elegidas: new Set(PREMARCADAS) };
+  const s = { paso: 1, motivo: existente?.motivo || null, modo: null, quiere: null, nivel: null, items: [] };
+  const elegirNivel = nivel => { s.nivel = nivel; s.items = rutinaPara(nivel, s.motivo); };
   const { el, close } = sheet(`🏖️ Día libre · ${fmtFecha(fecha, { weekday: 'long', day: 'numeric', month: 'short' })}`, '<div id="dl"></div>');
   const cont = el.querySelector('#dl');
 
@@ -44,20 +45,29 @@ export async function abrirDiaLibre(fecha) {
         ${pie('atras', s.modo === 'libre' ? 'Siguiente ›' : 'Confirmar día libre', s.modo === 'libre' ? 'siguiente' : 'confirmar', Boolean(s.modo))}`;
     },
     3() {
-      const lista = sugerenciasPara(s.motivo);
+      const enfermo = s.motivo === 'enfermo';
+      const choques = solapes(s.items.filter(x => x.marcada));
+      const nivel = NIVELES_ESFUERZO.find(n => n[0] === s.nivel);
       return `
-        <h3 style="margin:4px 0 4px">${s.motivo === 'enfermo' ? 'Para recuperarte mejor' : 'Una rutina para tu día libre'}</h3>
-        <p class="sub">${s.motivo === 'enfermo' ? 'Algunas cosas sencillas ayudan a recuperarte. Elige las que quieras.' : 'Un día libre sin nada de plan suele acabar en sofá y pantallas. Los expertos recomiendan combinar descanso con actividades que recarguen: aire libre, movimiento, gente que te cuide y una afición.'}</p>
+        <h3 style="margin:4px 0 4px">${enfermo ? 'Para recuperarte mejor' : 'Una rutina para tu día libre'}</h3>
+        <p class="sub">${enfermo ? 'Algunas cosas sencillas ayudan a recuperarte. Elige las que quieras.' : 'Un día libre sin nada de plan suele acabar en sofá y pantallas. Los expertos recomiendan combinar descanso con actividades que recarguen: aire libre, movimiento, gente que te cuide y una afición.'}</p>
         <div class="si-no">
           <button type="button" class="opcion-grande ${s.quiere === true ? 'activa' : ''}" data-accion="quiere" data-valor="si">✅ Sí, proponme una rutina</button>
           <button type="button" class="opcion-grande ${s.quiere === false ? 'activa' : ''}" data-accion="quiere" data-valor="no">No, solo descansar</button>
         </div>
-        ${s.quiere ? `<div class="card plano" style="margin-top:12px"><ul class="lista">${lista.map(x => `
-          <li style="align-items:flex-start"><input type="checkbox" class="elegir" data-sug="${x.id}" ${s.elegidas.has(x.id) ? 'checked' : ''} aria-label="${esc(x.titulo)}">
-          <div class="grow"><div class="t">${x.emoji} ${esc(x.titulo)}</div><div class="mini">${x.hora} · ${x.min} min · ${esc(x.porque)}</div></div></li>`).join('')}</ul></div>
-          <p class="mini">Las que marques se añaden a tu horario de ese día. Si no haces alguna, no pasa nada: no te penaliza.</p>` : ''}
+        ${s.quiere && !enfermo ? `<span class="cfg-etiqueta">¿Cuánto te quieres esforzar?</span>
+          <div class="grid3">${NIVELES_ESFUERZO.map(([v, e, t]) => `<button type="button" class="opcion-grande ${s.nivel === v ? 'activa' : ''}" data-accion="nivel" data-valor="${v}" aria-pressed="${s.nivel === v}">${e}<br><small>${t}</small></button>`).join('')}</div>
+          <p class="mini" style="margin-top:6px">${nivel ? esc(nivel[3]) : 'Elige uno y te preparo la rutina.'}</p>` : ''}
+        ${s.quiere && s.items.length ? `<span class="cfg-etiqueta">Tu rutina <span class="mini">(marca las que quieras y cambia la hora si te viene mejor)</span></span>
+          <div class="card plano"><ul class="lista">${s.items.map(x => `
+          <li style="align-items:flex-start"><input type="checkbox" class="elegir" data-sug="${x.id}" ${x.marcada ? 'checked' : ''} aria-label="${esc(x.titulo)}">
+          <div class="grow"><div class="t">${x.emoji} ${esc(x.titulo)}</div>
+            <div class="fila" style="gap:8px;margin:6px 0 2px"><input type="time" class="hora-sug" data-hora="${x.id}" value="${x.hora}" aria-label="Hora de ${esc(x.titulo)}"><span class="mini">hasta las ${toHHMM(toMin(x.hora) + x.min)} · ${x.min} min</span></div>
+            <div class="mini">${esc(x.porque)}</div>
+            ${x.marcada && choques[x.id] ? `<div class="mini" style="color:var(--red);margin-top:4px">⚠️ Se solapa con «${esc(choques[x.id])}»</div>` : ''}</div></li>`).join('')}</ul></div>
+          <p class="mini">Las que marques se añaden a tu horario de ese día a la hora que pongas. Si no haces alguna, no pasa nada: no te penaliza.</p>` : ''}
         ${s.quiere === false ? '<p class="mini" style="margin-top:10px">Perfecto: ese día solo descansas y no cuenta en tus estadísticas.</p>' : ''}
-        ${pie('atras', 'Confirmar día libre', 'confirmar', s.quiere != null)}`;
+        ${pie('atras', 'Confirmar día libre', 'confirmar', s.quiere === false || (s.quiere === true && (enfermo || Boolean(s.nivel))))}`;
     },
   };
 
@@ -69,14 +79,16 @@ export async function abrirDiaLibre(fecha) {
     atras: () => { s.paso = Math.max(1, s.paso - 1); },
     cancelar: () => close(),
     modo: v => { s.modo = v; },
-    quiere: v => { s.quiere = v === 'si'; },
+    quiere: v => { s.quiere = v === 'si'; if (s.quiere && s.motivo === 'enfermo') s.items = rutinaPara(null, 'enfermo'); },
+    nivel: v => elegirNivel(v),
     quitar: async () => {
       await quitarDiaLibre(fecha);
       close(); refrescar();
       toast('Día libre quitado. Para rehacer ese día, pulsa «Generar semana» en Horario.', 4000);
     },
     confirmar: async () => {
-      await marcarDiaLibre({ fecha, motivo: s.motivo, modo: s.modo, extras: s.modo === 'libre' && s.quiere ? [...s.elegidas] : [] });
+      const items = s.modo === 'libre' && s.quiere ? s.items.filter(x => x.marcada) : [];
+      await marcarDiaLibre({ fecha, motivo: s.motivo, modo: s.modo, items, esfuerzo: s.quiere ? s.nivel : null });
       close(); refrescar();
       toast(s.modo === 'rutina' ? '🔁 Día libre anotado: haces tu rutina sin trabajar.' : '🏖️ Día libre anotado. ¡A descansar!', 3500);
     },
@@ -91,7 +103,9 @@ export async function abrirDiaLibre(fecha) {
   });
   cont.addEventListener('change', ev => {
     const c = ev.target.closest('[data-sug]');
-    if (c) c.checked ? s.elegidas.add(c.dataset.sug) : s.elegidas.delete(c.dataset.sug);
+    if (c) { s.items.find(x => x.id === c.dataset.sug).marcada = c.checked; pintar(); return; }
+    const h = ev.target.closest('[data-hora]');
+    if (h && /^\d\d:\d\d$/.test(h.value)) { s.items.find(x => x.id === h.dataset.hora).hora = h.value; pintar(); }
   });
   pintar();
 }

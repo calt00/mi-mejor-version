@@ -24,7 +24,7 @@
     import { progresoDiario, mediaMovil, mejorRacha, resumenSemana, semanaPendiente, inicioHabito, resumenDia, ideasDia, diaPendiente } from '../js/progreso.js';
     import { logrosCumplidos, LOGROS } from '../js/logros.js';
     import { compromisosDelDia } from '../js/compromisos.js';
-    import { opinionDiaLibre, diasLibresRecientes, bloquesDeSugerencias, sugerenciasPara } from '../js/diasLibres.js';
+    import { opinionDiaLibre, diasLibresRecientes, bloquesDeSugerencias, rutinaPara, solapes } from '../js/diasLibres.js';
     import { dormirMin, valorarSueno, planSueno, analizarSueno, acostarObjetivo, consejosSueno, recortarFranjas, acostarAbs, valorarHorario } from '../js/sueno.js';
     import { barrasSVG, calendarioHTML } from '../js/grafica.js';
     import { normalizarPlan, cruzarConExistentes, unirFranjas, normalizarTurnos } from '../js/plan.js';
@@ -453,12 +453,26 @@
       igual(diasLibresRecientes(libres, '2026-11-05'), 1, 'solo los voluntarios de los últimos 30 días, sin contar el propio día');
     });
 
-    prueba('Día libre: las sugerencias se convierten en bloques sin pisarse', () => {
-      const b = bloquesDeSugerencias('2026-11-05', ['levantarse', 'estirar', 'paseo']);
-      igual(b.map(x => x.inicio + '-' + x.fin).join(), '09:00-09:30,09:45-10:00,10:30-11:15');
-      igual(b.every(x => x.extra && x.fecha === '2026-11-05' && !x.hecho), true);
-      igual(bloquesDeSugerencias('2026-11-05', ['descansar'], 'enfermo').length, 1, 'enfermo tiene sus propias sugerencias');
-      igual(sugerenciasPara('enfermo').some(s => s.id === 'ejercicio'), false, 'enfermo no propone ejercicio');
+    prueba('Día libre: la rutina cambia según cuánto te quieras esforzar', () => {
+      const ids = n => rutinaPara(n).map(x => x.id);
+      igual(ids('suave').includes('ejercicio'), false, 'tranquilo: sin ejercicio'); igual(ids('suave').includes('siesta'), true, 'tranquilo: siesta corta');
+      igual(ids('medio').includes('ejercicio'), true); igual(ids('activo').includes('siesta'), false);
+      const min = (n, id) => rutinaPara(n).find(x => x.id === id)?.min;
+      igual(min('suave', 'paseo'), 30); igual(min('medio', 'paseo'), 45); igual(min('activo', 'paseo'), 90, 'más esfuerzo, caminata más larga');
+      igual(min('medio', 'ejercicio'), 45); igual(min('activo', 'ejercicio'), 75);
+      igual(rutinaPara('activo').filter(x => x.marcada).length > rutinaPara('suave').filter(x => x.marcada).length - 3, true);
+      igual(rutinaPara(null, 'enfermo').some(x => x.id === 'ejercicio'), false, 'enfermo no propone ejercicio');
+      igual(rutinaPara(null, 'enfermo').map(x => x.id).join(), 'descansar,agua,ligera,ventilar');
+    });
+
+    prueba('Día libre: se puede mover la hora y se avisa si se pisan', () => {
+      const a = { id: 'a', emoji: '☀️', titulo: 'A', min: 30, hora: '09:00', porque: 'p' }, b = { id: 'b', emoji: '🚶', titulo: 'B', min: 45, hora: '09:15', porque: 'q' };
+      igual(JSON.stringify(solapes([a, b])), JSON.stringify({ b: 'A' }), 'B empieza antes de que acabe A');
+      igual(Object.keys(solapes([a, { ...b, hora: '09:30' }])).length, 0, 'justo a continuación no se pisa');
+      const bl = bloquesDeSugerencias('2026-11-05', [b, a]);
+      igual(bl.map(x => x.inicio + '-' + x.fin).join(), '09:00-09:30,09:15-10:00', 'cada una a la hora que se le puso, sin moverlas');
+      igual(bl.every(x => x.extra && x.fecha === '2026-11-05' && !x.hecho), true);
+      igual(bloquesDeSugerencias('2026-11-05', [{ ...a, hora: '23:45', min: 30 }]).length, 0, 'lo que acabaría después de las 23:59 se deja fuera');
     });
 
     prueba('Día libre: no cuenta en las estadísticas ni penaliza', () => {

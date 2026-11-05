@@ -528,3 +528,4 @@ details summary { cursor: pointer; color: var(--accent); }
 .anillo-grande .isla { font-size: 54px; line-height: 1; }
 .stepper .min-input { width: 64px; padding: 8px 4px; text-align: center; font-weight: 700; background: transparent; border: 0; border-radius: 8px; -moz-appearance: textfield; }
 .stepper .min-input::-webkit-outer-spin-button, .stepper .min-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.hora-sug { width: 124px !important; padding: 7px 8px; }
