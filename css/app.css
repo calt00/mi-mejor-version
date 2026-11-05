@@ -455,3 +455,46 @@ input[type="checkbox"] { width: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .celebracion { display: none; }
 }
+
+/* ----- «Hoy»: círculo grande de progreso ----- */
+@property --p { syntax: '<number>'; inherits: false; initial-value: 0; }
+.hero-dia { display: block; color: inherit; margin: 8px 0 4px; }
+.anillo-grande {
+  --p: 0; width: min(74vw, 280px); aspect-ratio: 1; margin: 0 auto; border-radius: 50%;
+  display: grid; place-items: center;
+  background: conic-gradient(#ffb800 0, #ff7a1a calc(var(--p) * .55%), #e8281e calc(var(--p) * 1%), var(--accent-soft) 0);
+  box-shadow: 0 14px 40px -12px var(--sombra-fuego);
+  transition: --p 1.1s cubic-bezier(.2, .8, .2, 1);
+}
+.anillo-grande .interior {
+  width: 82%; aspect-ratio: 1; border-radius: 50%; background: var(--card);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+}
+.anillo-grande b {
+  font-size: 64px; line-height: 1; font-weight: 800; letter-spacing: -0.04em;
+  background: var(--grad-fuego); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.anillo-grande .interior > span:last-child { color: var(--text2); font-size: 15px; font-weight: 600; }
+.anillo-grande .llama { font-size: 30px; line-height: 1; animation: flotar-llama 1.6s ease-in-out infinite; }
+.anillo-grande.completo { box-shadow: 0 0 0 4px rgba(255, 184, 0, .25), 0 14px 46px -6px var(--sombra-fuego); }
+@keyframes flotar-llama { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-3px) scale(1.12); } }
+.estado-dia { text-align: center; color: var(--text2); font-size: 15px; margin: 14px 8px 6px; }
+.aviso-linea {
+  display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 14px; margin: 10px 0 0; border-radius: 14px;
+  background: var(--card); box-shadow: var(--shadow); border-left: 5px solid var(--accent); font-size: 14px;
+}
+.aviso-linea .ico { font-size: 20px; }
+.aviso-linea .grow { flex: 1; min-width: 0; }
+
+/* ----- Turnos rotativos: el ciclo de semanas ----- */
+.ciclo { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; margin: 6px 0 10px; }
+.ciclo-sem {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px 8px;
+  background: var(--card); color: var(--text); border: 2px solid var(--sep); border-top: 6px solid var(--c, var(--accent)); border-radius: 14px; cursor: pointer;
+}
+.ciclo-sem b { font-size: 15px; }
+.ciclo-sem span { font-size: 12px; color: var(--text2); }
+.ciclo-sem.t-manana { --c: #ffc400; } .ciclo-sem.t-tarde { --c: #ff7a1a; } .ciclo-sem.t-noche { --c: #c0281e; }
+.ciclo-sem.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 6px 18px var(--sombra-fuego); }
+.ciclo-sem.on::after { content: '📍 Estoy aquí'; position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: 10.5px; font-weight: 800; white-space: nowrap; padding: 2px 8px; border-radius: 999px; background: var(--grad-btn); color: #fff; }
+.ciclo-resumen { font-size: 14px; background: var(--card2); border-radius: 12px; padding: 10px 12px; margin-top: 4px; line-height: 1.6; }

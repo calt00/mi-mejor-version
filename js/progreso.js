@@ -16,7 +16,8 @@ export function progresoDiario({ blocks = [], habits = [], tasks = [], desde, ha
   for (const b of blocks) if (b.fecha >= desde && b.fecha <= hasta) (porFecha[b.fecha] ||= []).push(b);
   const tareasPorFecha = {};
   for (const t of tasks) if (t.hecho && t.hechoEn) tareasPorFecha[t.hechoEn] = (tareasPorFecha[t.hechoEn] || 0) + 1;
-  const hs = habits.map(h => ({ inicio: inicioHabito(h, inicioApp), registros: new Set(h.registros) }));
+  // Un hábito que ya está en el horario cuenta por su bloque: así no se cuenta dos veces.
+  const hs = habits.filter(h => !h.goalId).map(h => ({ inicio: inicioHabito(h, inicioApp), registros: new Set(h.registros) }));
 
   const out = [];
   for (let f = desde; f <= hasta; f = addDays(f, 1)) {
@@ -118,7 +119,7 @@ export const HORA_REVISION = 20 * 60;
 /** Números de un día para la revisión nocturna: qué salió bien y qué quedó sin hacer. */
 export function resumenDia(d, fecha) {
   const bs = d.blocks.filter(b => b.fecha === fecha).sort((a, b) => a.inicio.localeCompare(b.inicio));
-  const activos = d.habits.filter(h => inicioHabito(h, d.inicioApp) <= fecha);
+  const activos = d.habits.filter(h => !h.goalId && inicioHabito(h, d.inicioApp) <= fecha);
   const dia = progresoDiario({ ...d, desde: fecha, hasta: fecha })[0];
   const horas = d.goals.map(g => ({ titulo: g.titulo, min: sum(bs.filter(b => b.goalId === g.id && b.hecho), minutos) })).filter(x => x.min);
   const tareas = d.tasks.filter(t => t.hecho && t.hechoEn === fecha).length;

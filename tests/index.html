@@ -297,6 +297,19 @@
       igual(diaPendiente('2026-10-28', 21 * 60, [{ fecha: '2026-10-27' }]), true, 'la de ayer no cuenta');
     });
 
+    prueba('Progreso del día: un hábito que ya está en el horario no cuenta dos veces', () => {
+      const d = { desde: '2026-10-28', hasta: '2026-10-28', inicioApp: '2026-10-01', tasks: [],
+        blocks: [{ ...blq('2026-10-28', true), goalId: 'G' }],
+        habits: [{ id: 'h', goalId: 'G', registros: ['2026-10-28'], creado: '2026-10-01' }, { id: 'h2', registros: [], creado: '2026-10-01' }] };
+      const [dia] = progresoDiario(d);
+      igual(dia.planificados, 2, 'bloque + hábito sin hora'); igual(dia.hechos, 1); igual(dia.pct, 50);
+    });
+
+    for (const vista of ['hoy', 'objetivos', 'habitos', 'configurar', 'revision', 'perfil', 'progreso', 'horario', 'ahorro', 'asistente']) {
+      try { await import(`../js/views/${vista}.js`); prueba(`La pantalla «${vista}» carga sin errores`, () => {}); }
+      catch (e) { prueba(`La pantalla «${vista}» carga sin errores`, () => { throw e; }); }
+    }
+
     prueba('Logros: se cumplen con los datos justos', () => {
       const vacio = { hoy: '2026-10-29', blocks: [], habits: [], tasks: [], goals: [], savingsGoals: [], contributions: [], revisiones: [], serie: [] };
       igual(logrosCumplidos(vacio).length, 0, 'sin datos');

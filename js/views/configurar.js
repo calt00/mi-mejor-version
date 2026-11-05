@@ -49,6 +49,33 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
   const hora = (ruta, etiqueta) => `<input type="time" value="${leer(e, ruta)}" data-campo="${ruta}" aria-label="${etiqueta}">`;
   const tramoHTML = (base, quitar = '') => `<div class="tramo"><span>De</span>${hora(`${base}.inicio`, 'Entrada')}<span>a</span>${hora(`${base}.fin`, 'Salida')}${quitar}</div>`;
 
+  // ---------- Turnos que duran varias semanas ----------
+  let turnosDistintos = false; // «cada turno dura distinto»
+  const SEMANAS = [[1, 'Cada semana'], [2, 'Cada 2 semanas'], [3, 'Cada 3 semanas'], [4, 'Cada 4 semanas']];
+  const ordinal = n => `${n}.ª`;
+  const cicloHTML = activos => {
+    const T = e.turnos;
+    const patron = activos.flatMap(k => Array.from({ length: T.tipos[k].semanas }, (_, i) => ({ k, n: i + 1, de: T.tipos[k].semanas })));
+    const sems = activos.map(k => T.tipos[k].semanas);
+    const distintos = turnosDistintos || sems.some(x => x !== sems[0]);
+    const actual = Math.max(0, patron.findIndex(p => p.k === T.actual && p.n === (T.semanaActual || 1)));
+    const nombre = p => `<b>${TURNO_TXT[p.k].toLowerCase()}</b>${p.de > 1 ? ` (${ordinal(p.n)} de ${p.de})` : ''}`;
+    return `
+      <span class="cfg-etiqueta">¿Cada cuánto cambias de turno?</span>
+      ${distintos
+        ? activos.map(k => `<div class="fila sep" style="margin-bottom:8px"><span class="mini" style="min-width:64px">${TURNO_TXT[k]}</span>${opcionesHTML('semanas-tipo', [1, 2, 3, 4].map(n => [n, n === 1 ? '1 semana' : `${n} sem.`]), T.tipos[k].semanas, `data-tipo="${k}"`)}</div>`).join('')
+        : opcionesHTML('ciclo-semanas', SEMANAS, sems[0])}
+      <button type="button" class="btn gris chico" style="margin-top:8px" data-accion="distintos">${distintos ? 'Todos duran lo mismo' : 'Cada turno dura distinto'}</button>
+      <span class="cfg-etiqueta">¿En qué punto estás ahora? <span class="mini">(toca tu semana)</span></span>
+      <div class="ciclo" style="margin-top:16px">${patron.map(p => `<button type="button" class="ciclo-sem t-${p.k} ${p === patron[actual] ? 'on' : ''}" data-accion="turno-actual" data-valor="${p.k}:${p.n}" aria-pressed="${p === patron[actual]}">
+        <b>${TURNO_TXT[p.k]}</b><span>${p.de > 1 ? `Semana ${p.n} de ${p.de}` : '1 semana'}</span></button>`).join('')}</div>
+      <p class="ciclo-resumen">Esta semana: ${nombre(patron[actual])}.<br>La que viene: ${nombre(patron[(actual + 1) % patron.length])}.<br>Después: ${nombre(patron[(actual + 2) % patron.length])}.</p>`;
+  };
+  const ajustarSemanaActual = () => {
+    const t = e.turnos.tipos[e.turnos.actual];
+    if (t) e.turnos.semanaActual = Math.min(e.turnos.semanaActual || 1, t.semanas);
+  };
+
   // ---------- Pasos ----------
   const PANTALLAS = {
     trabajo() {
@@ -61,18 +88,12 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
         ${e.fijo.tramos.length < 3 ? '<button type="button" class="btn gris chico" data-accion="tramo-mas">+ Otro tramo (jornada partida)</button>' : ''}`;
       if (e.trabaja && e.tipoHorario === 'turnos') {
         const activos = tiposActivos(e);
-        // «Tarde · 2.ª semana»: por si ya has hecho alguna semana de ese turno.
-        const posiciones = activos.flatMap(k => Array.from({ length: T.tipos[k].semanas }, (_, n) => [`${k}:${n + 1}`, T.tipos[k].semanas > 1 ? `${TURNO_TXT[k]} · ${n + 1}.ª semana` : TURNO_TXT[k]]));
         detalle = `
         <span class="cfg-etiqueta">¿Qué días trabajas?</span>${diasHTML('turnos.dias')}
         <span class="cfg-etiqueta">¿Qué turnos haces?</span>
         <div class="opciones-chip">${TIPOS_TURNO.map(([k, t]) => `<button type="button" class="chip ${T.tipos[k].activo ? 'activa' : ''}" data-accion="turno-tipo" data-valor="${k}">${t}</button>`).join('')}</div>
-        ${activos.map(k => `<div class="card cfg-sub"><b>Turno de ${TURNO_TXT[k].toLowerCase()}</b>
-          ${tramoHTML(`turnos.tipos.${k}`)}
-          <div class="fila sep"><span class="mini">Semanas seguidas</span>
-            <div class="stepper"><button type="button" data-accion="semanas" data-tipo="${k}" data-valor="-1" aria-label="Menos">−</button><b>${T.tipos[k].semanas}</b><button type="button" data-accion="semanas" data-tipo="${k}" data-valor="1" aria-label="Más">+</button></div></div>
-        </div>`).join('')}
-        ${posiciones.length > 1 ? `<span class="cfg-etiqueta">Esta semana estoy de</span>${opcionesHTML('turno-actual', posiciones, `${T.actual}:${T.semanaActual || 1}`)}` : ''}`;
+        ${activos.map(k => `<div class="card cfg-sub"><b>Turno de ${TURNO_TXT[k].toLowerCase()}</b>${tramoHTML(`turnos.tipos.${k}`)}</div>`).join('')}
+        ${activos.length > 1 ? cicloHTML(activos) : ''}`;
       }
       if (e.trabaja && e.tipoHorario === 'variable') detalle = `
         <span class="cfg-etiqueta">Toca los días que trabajas y pon su horario</span>
@@ -194,10 +215,13 @@ export async function montarConfigurador(cont, { alTerminar, alVolver } = {}) {
       e.turnos.tipos[v].activo = !e.turnos.tipos[v].activo;
       if (!tiposActivos(e).includes(e.turnos.actual)) { e.turnos.actual = tiposActivos(e)[0] || 'manana'; e.turnos.semanaActual = 1; }
     },
-    semanas: (v, b) => {
-      const t = e.turnos.tipos[b.dataset.tipo];
-      t.semanas = Math.min(4, Math.max(1, t.semanas + Number(v)));
-      if (e.turnos.actual === b.dataset.tipo) e.turnos.semanaActual = Math.min(e.turnos.semanaActual || 1, t.semanas);
+    'ciclo-semanas': v => { for (const k of tiposActivos(e)) e.turnos.tipos[k].semanas = Number(v); ajustarSemanaActual(); },
+    'semanas-tipo': (v, b) => { e.turnos.tipos[b.dataset.tipo].semanas = Number(v); ajustarSemanaActual(); },
+    distintos: () => {
+      const activos = tiposActivos(e), primera = e.turnos.tipos[activos[0]].semanas;
+      if (turnosDistintos || activos.some(k => e.turnos.tipos[k].semanas !== primera)) { for (const k of activos) e.turnos.tipos[k].semanas = primera; turnosDistintos = false; }
+      else turnosDistintos = true;
+      ajustarSemanaActual();
     },
     'turno-actual': v => { const [tipo, semana] = v.split(':'); e.turnos.actual = tipo; e.turnos.semanaActual = Number(semana) || 1; },
     'variable-dia': v => { e.variable[v].activo = !e.variable[v].activo; },

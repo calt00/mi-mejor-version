@@ -1,20 +1,14 @@
-// Pantalla «Hoy»: progreso del día, asistente, bloques, hábitos y ahorro.
+// Pantalla «Hoy»: un círculo grande que se llena con lo que haces y, debajo, el horario del día.
+// Lo demás (hábitos, ahorro, asistente, progreso) vive en su propia pestaña.
 import { db, kvGet, kvSet } from '../db.js';
 import { getProfile } from '../datos.js';
-import { esc, hoyISO, fmtFecha, sheet, formData, toast, refrescar, fmtEur, fmtHoras, addDays, diasEntre, opciones, nowMin } from '../util.js';
-import { bloqueHTML, conectarBloques, abrirEditorBloque, abrirEnvioIphone, racha, datosFinanzas, momentoBloque } from './comun.js';
-import { responder, mensajeHTML, conectarMensajes } from './asistente.js';
-import { estadoMeta, recomendaciones } from '../finanzas.js';
-import { cerditoHTML } from '../cerdito.js';
-import { progresoDiario, mediaSerie, semanaPendiente, diaPendiente } from '../progreso.js';
-import { barrasSVG } from '../grafica.js';
+import { esc, hoyISO, fmtFecha, refrescar, addDays, diasEntre, nowMin } from '../util.js';
+import { bloqueHTML, conectarBloques, abrirEditorBloque, abrirEnvioIphone, datosFinanzas, momentoBloque } from './comun.js';
+import { progresoDiario, semanaPendiente, diaPendiente } from '../progreso.js';
 import { comprobarLogros } from '../logros.js';
 import { abrirRevision, abrirRevisionDiaria } from './revision.js';
-import { abrirCalendarioHabito } from './progreso.js';
 import { exportar } from './perfil.js';
-import { abrirCatalogoHabitos, mostrarHabitoCreado, botonesMomento, frecuenciaTxt } from './habitos.js';
-import { siguienteNivel } from '../habitos.js';
-import { crearHabito, ponerEnHorario, borrarHabito, marcarHabito } from '../rutinas.js';
+import { filaHabitosHTML, conectarFilaHabitos } from './habitos.js';
 
 const DIAS_ENTRE_COPIAS = 7;
 
@@ -31,6 +25,10 @@ function saludo(nombre) {
   return nombre ? `${s}, ${nombre}` : s;
 }
 
+// Aviso pequeño de una línea (solo aparece cuando toca).
+const aviso = (id, icono, texto, boton, extra = '') =>
+  `<div class="aviso-linea"><span class="ico">${icono}</span><span class="grow">${texto}</span>${extra}<button class="btn chico" id="${id}">${boton}</button></div>`;
+
 export async function render(root) {
   const hoy = hoyISO();
   const [perfil, goals, blocks, habits, tasks, fin, revisiones, revisionesDia, ultimaCopia, copiaPospuesta] = await Promise.all([
@@ -38,208 +36,64 @@ export async function render(root) {
     kvGet('revisiones', []), kvGet('revisionesDia', []), kvGet('ultimaCopia'), kvGet('copiaPospuesta'),
   ]);
   const inicioApp = fin.inicioApp || hoy;
-  const semana = progresoDiario({ blocks, habits, tasks, desde: addDays(hoy, -6), hasta: hoy, inicioApp });
-  const mediaSemana = mediaSerie(semana);
   const lunesRevision = semanaPendiente(hoy, revisiones, inicioApp);
   const revisarNoche = diaPendiente(hoy, nowMin(), revisionesDia);
   const hayDatos = goals.length + blocks.length + habits.length + fin.expenses.length + fin.savingsGoals.length > 0;
   const copia = tocaCopia({ hoy, ultimaCopia, copiaPospuesta, inicioApp, hayDatos });
   const goalsById = Object.fromEntries(goals.map(g => [g.id, g]));
   const deHoy = blocks.filter(b => b.fecha === hoy).sort((a, b) => a.inicio.localeCompare(b.inicio));
-  const hechos = deHoy.filter(b => b.hecho).length;
-  const pct = deHoy.length ? Math.round(hechos / deHoy.length * 100) : 0;
+  const sinHora = habits.filter(h => !h.goalId); // hábitos que aún no están en el horario: se marcan aquí
+
+  // Lo hecho hoy: bloques, hábitos sin hora y tareas terminadas (que suman sin penalizar).
+  const [dia] = progresoDiario({ blocks, habits, tasks, desde: hoy, hasta: hoy, inicioApp });
+  const pct = dia.pct ?? 0;
   const actual = deHoy.find(b => momentoBloque(b) === 'ahora' && !b.hecho);
   const siguiente = deHoy.find(b => momentoBloque(b) === 'futuro' && !b.hecho);
 
-  const metas = fin.savingsGoals.map(m => ({ ...m, ...estadoMeta(m, fin.contributions, hoy) }));
-  const totalAhorrado = metas.reduce((a, m) => a + m.ahorrado, 0);
-  const totalMeta = metas.reduce((a, m) => a + (Number(m.meta) || 0), 0);
-  const rec = recomendaciones(fin)[0];
-
-  let estado = 'Sin bloques para hoy.';
+  let estado = 'Tu día está libre.';
   if (actual) estado = `Ahora: <b>${esc(actual.titulo)}</b> hasta las ${actual.fin}`;
   else if (siguiente) estado = `Siguiente: <b>${esc(siguiente.titulo)}</b> a las ${siguiente.inicio}`;
-  else if (deHoy.length && hechos === deHoy.length) estado = '¡Has completado todo lo de hoy! 🎉';
-  else if (deHoy.length) estado = 'No quedan bloques pendientes por hoy.';
+  else if (dia.planificados && pct >= 100) estado = '¡Has completado todo lo de hoy!';
+  else if (dia.planificados) estado = 'No quedan bloques pendientes por hoy.';
 
   root.innerHTML = `
-    <p class="sub" style="margin:0 4px 12px">${fmtFecha(hoy)} · ${esc(saludo(perfil.nombre))}</p>
+    <p class="sub centro" style="margin:0 0 6px">${fmtFecha(hoy)} · ${esc(saludo(perfil.nombre))}</p>
 
-    <div class="card">
-      <div class="fila">
-        <div class="anillo" style="--p:${pct}"><span>${pct}%</span></div>
-        <div class="grow" style="flex:1">
-          <div style="font-weight:700">${deHoy.length ? `${hechos} de ${deHoy.length} bloques hechos` : 'Tu día está libre'}</div>
-          <div class="sub">${estado}</div>
+    <a class="hero-dia" href="#progreso" aria-label="Ver mi progreso">
+      <div class="anillo-grande ${pct >= 100 ? 'completo' : ''}" id="anillo" data-p="${pct}" style="--p:0">
+        <div class="interior">
+          ${pct >= 100 ? '<span class="llama">🔥</span>' : ''}
+          <b>${pct}%</b>
+          <span>${dia.planificados ? `${dia.hechos + dia.tareas} de ${dia.planificados} hechos` : 'nada planificado'}</span>
         </div>
       </div>
-      <div class="acciones">
-        <button class="btn chico" id="enviar">📲 Enviar al iPhone</button>
-        <button class="btn sec chico" id="nuevo-bloque">+ Bloque</button>
-        <a class="btn gris chico" href="#horario">Ver horario</a>
-      </div>
-    </div>
+    </a>
+    <p class="estado-dia">${estado}</p>
 
-    ${revisarNoche ? `<div class="card aviso-card">
-      <div class="fila"><span style="font-size:30px">🌙</span><div class="grow" style="flex:1">
-        <b>Revisa tu día</b><div class="sub">Mira qué ha salido bien, qué mejorar y prepara mañana.</div></div></div>
-      <div class="acciones"><button class="btn chico" id="revision-dia">Revisar mi día</button></div></div>` : ''}
+    ${revisarNoche ? aviso('revision-dia', '🌙', '<b>Revisa tu día</b>', 'Revisar') : ''}
+    ${lunesRevision ? aviso('revision', '📋', '<b>Tu revisión semanal está lista</b>', 'Ver') : ''}
+    ${copia ? aviso('copia', '💾', copia.nunca ? '<b>Aún no has hecho copia de seguridad</b>' : `<b>Hace ${copia.dias} días de tu última copia</b>`, 'Copiar', '<button class="btn-icon" id="copia-luego" aria-label="Más tarde">✕</button>') : ''}
 
-    ${lunesRevision ? `<div class="card aviso-card">
-      <div class="fila"><span style="font-size:30px">📋</span><div class="grow" style="flex:1">
-        <b>Tu revisión semanal está lista</b><div class="sub">Mira cómo te ha ido esta semana y qué mejorar en la siguiente.</div></div></div>
-      <div class="acciones"><button class="btn chico" id="revision">Ver mi semana</button></div></div>` : ''}
-
-    ${copia ? `<div class="card aviso-card naranja">
-      <div class="fila"><span style="font-size:30px">💾</span><div class="grow" style="flex:1">
-        <b>${copia.nunca ? 'Aún no has hecho ninguna copia' : `Hace ${copia.dias} días de tu última copia`}</b>
-        <div class="sub">Tus datos solo están en este iPhone. Guarda una copia en Archivos o iCloud Drive por si cambias de móvil.</div></div></div>
-      <div class="acciones"><button class="btn chico" id="copia">Hacer copia ahora</button><button class="btn gris chico" id="copia-luego">Más tarde</button></div></div>` : ''}
-
-    <div class="card" id="asistente">
-      <div class="fila sep"><b>🤖 Tu asistente</b><a class="mini" href="#asistente">Abrir chat ›</a></div>
-      <form id="orden" class="fila" style="margin-top:8px">
-        <input name="texto" placeholder="«hoy no puedo», «ya he hecho inglés», «5 € en café»…" autocomplete="off" enterkeyhint="send">
-        <button class="btn" style="flex:none;padding:0 14px" aria-label="Enviar">↑</button>
-      </form>
-      <div id="respuesta"></div>
-    </div>
-
-    <div class="seccion"><h2>Tu día</h2></div>
-    ${deHoy.length ? `<div class="bloques">${deHoy.map(b => bloqueHTML(b, goalsById)).join('')}</div>` : `
+    <div class="seccion"><h2>Tu horario</h2><button class="btn sec chico" id="nuevo-bloque">+ Bloque</button></div>
+    ${deHoy.length ? `<div class="bloques">${deHoy.map(b => bloqueHTML(b, goalsById)).join('')}</div>
+      <button class="btn gris ancho" id="enviar" style="margin-top:12px">📲 Enviar al iPhone</button>` : `
       <div class="card vacio"><span class="ico">🗓️</span>No tienes nada planificado para hoy.
         <div class="acciones" style="justify-content:center"><a class="btn chico" href="#horario">Crear mi horario</a></div></div>`}
 
-    <div class="seccion"><h2>Hábitos</h2><button class="btn sec chico" id="habitos">${habits.length ? 'Gestionar' : '+ Hábito'}</button></div>
-    ${habits.length ? `<div class="habitos">${habits.map(h => {
-      const on = h.registros.includes(hoy), r = racha(h);
-      return `<div class="habito ${on ? 'on' : ''}" data-habito="${h.id}" role="button" aria-pressed="${on}">
-        <div class="e">${esc(h.emoji || '✨')}</div><div class="t">${esc(h.titulo)}</div><div class="r">${r ? `🔥 ${r}` : '&nbsp;'}</div></div>`;
-    }).join('')}</div>` : `<div class="card vacio">Pequeños hábitos diarios (beber agua, caminar, leer…) y mantén tu racha. 🔥
-      <div class="acciones" style="justify-content:center"><button class="btn chico" id="descubrir">✨ Descubrir hábitos</button></div></div>`}
+    ${sinHora.length ? `<div class="seccion"><h2>Hábitos de hoy</h2></div>${filaHabitosHTML(sinHora, hoy)}` : ''}`;
 
-    <div class="seccion"><h2>Tu progreso</h2><a class="btn sec chico" href="#progreso">Ver más</a></div>
-    <a class="card" href="#progreso" style="display:block;color:inherit">
-      ${semana.some(d => d.pct != null) ? `<div class="fila sep"><span class="sub">Últimos 7 días</span><b>${mediaSemana} % de media</b></div>
-        ${barrasSVG(semana, { compacto: true })}` : '<div class="sub">📈 Marca tus bloques y hábitos como hechos y aquí verás una gráfica de tu progreso día a día.</div>'}
-    </a>
-
-    <div class="seccion"><h2>Ahorro</h2><a class="btn sec chico" href="#ahorro">Abrir</a></div>
-    <a class="card hero-ahorro" href="#ahorro" style="color:inherit">
-      <div class="cerdito-caja">${cerditoHTML(totalMeta ? totalAhorrado / totalMeta : 0)}</div>
-      <div>
-        <div class="grande">${fmtEur(totalAhorrado, true)}</div>
-        <div class="sub">${totalMeta ? `ahorrado de ${fmtEur(totalMeta, true)}` : 'Crea tu primera meta de ahorro'}</div>
-        ${rec ? `<div class="mini" style="margin-top:6px">${rec.icono} ${esc(rec.titulo)}</div>` : ''}
-      </div>
-    </a>`;
+  // El círculo se rellena con una animación suave al entrar.
+  const anillo = root.querySelector('#anillo');
+  requestAnimationFrame(() => requestAnimationFrame(() => anillo.style.setProperty('--p', anillo.dataset.p)));
 
   conectarBloques(root, deHoy);
-  root.querySelector('#enviar').addEventListener('click', () => abrirEnvioIphone('hoy'));
+  conectarFilaHabitos(root, sinHora, hoy);
+  root.querySelector('#enviar')?.addEventListener('click', () => abrirEnvioIphone('hoy'));
   root.querySelector('#nuevo-bloque').addEventListener('click', () => abrirEditorBloque(null, { fecha: hoy }));
-  root.querySelector('#habitos').addEventListener('click', () => gestionarHabitos(habits));
-  root.querySelector('#descubrir')?.addEventListener('click', abrirCatalogoHabitos);
-  root.querySelectorAll('[data-habito]').forEach(el => el.addEventListener('click', async () => {
-    const h = habits.find(x => x.id === el.dataset.habito);
-    const on = h.registros.includes(hoy);
-    await marcarHabito(h, hoy, !on);
-    h.registros = on ? h.registros.filter(d => d !== hoy) : [...h.registros, hoy];
-    if (!on) { navigator.vibrate?.(30); const r = racha(h); if (r > 1) toast(`🔥 ¡Racha de ${r} días!`); }
-    refrescar();
-  }));
   root.querySelector('#revision-dia')?.addEventListener('click', () => abrirRevisionDiaria(hoy));
   root.querySelector('#revision')?.addEventListener('click', () => abrirRevision(lunesRevision).then(() => setTimeout(refrescar, 300)));
   root.querySelector('#copia')?.addEventListener('click', async () => { if (await exportar()) refrescar(); });
   root.querySelector('#copia-luego')?.addEventListener('click', async () => { await kvSet('copiaPospuesta', addDays(hoy, 2)); refrescar(); });
 
-  conectarAsistente(root.querySelector('#asistente'));
   comprobarLogros().catch(e => console.warn('Logros:', e));
-}
-
-// Caja para escribir al asistente sin salir de «Hoy»: muestra su respuesta y, si cambia algo, refresca la pantalla.
-function conectarAsistente(caja) {
-  const form = caja.querySelector('#orden'), zona = caja.querySelector('#respuesta');
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
-    const texto = form.texto.value.trim();
-    if (!texto) return;
-    form.texto.value = '';
-    await kvSet('agenteContexto', null); // desde «Hoy», lo que se escribe es para hoy
-    const m = await responder(texto);
-    if (m.ops) { recordar(m); refrescar(); return; }
-    pintar(m);
-  });
-  const recordar = m => { try { sessionStorage.setItem('respuestaAsistente', JSON.stringify(m)); } catch { /* sin almacenamiento */ } };
-  const pintar = m => {
-    zona.innerHTML = `<div class="respuesta-asistente">${mensajeHTML(m)}</div>`;
-    zona.querySelector('.msg')?.classList.remove('msg', 'model');
-    conectarMensajes(zona, [m], nueva => { if (nueva.ops) { recordar(nueva); refrescar(); } else pintar(nueva); }, refrescar);
-  };
-  // Tras un cambio se repinta «Hoy» y se vuelve a enseñar la última respuesta (con su «Deshacer»).
-  let guardada = null;
-  try { guardada = JSON.parse(sessionStorage.getItem('respuestaAsistente') || 'null'); sessionStorage.removeItem('respuestaAsistente'); } catch { /* sin almacenamiento */ }
-  if (guardada) pintar(guardada);
-}
-
-function gestionarHabitos(habits) {
-  const tiene = new Set(habits.map(h => h.catalogo).filter(Boolean));
-  // Tras una semana seguida, se propone la alternativa más retadora del mismo propósito.
-  const subir = h => {
-    const sig = h.catalogo && racha(h) >= 7 ? siguienteNivel(h.catalogo) : null;
-    return sig && !tiene.has(sig.id) ? `<button class="btn sec chico" style="margin-top:6px" data-subir="${sig.id}" data-momento-de="${h.id}">⬆️ ¿Subir de nivel? ${esc(sig.emoji)} ${esc(sig.titulo)}</button>` : '';
-  };
-  const MOMENTO = { manana: 'por la mañana', tarde: 'por la tarde', noche: 'por la noche' };
-  const enHorario = h => (h.goalId ? `📅 ${frecuenciaTxt(h.veces || 7)} ${MOMENTO[h.momento] || ''}`
-    : `<button class="btn gris chico" style="margin-top:6px" data-horario="${h.id}">📅 Ponerlo en el horario</button>`);
-  const { el, close } = sheet('Hábitos', `
-    <button class="btn ancho" id="descubrir" style="margin-bottom:12px">✨ Descubrir hábitos saludables</button>
-    ${habits.length ? `<div class="card plano"><ul class="lista">${habits.map(h => `
-      <li><span style="font-size:24px">${esc(h.emoji || '✨')}</span><div class="grow"><div class="t">${esc(h.titulo)}</div>
-      <div class="mini">🔥 Racha: ${racha(h)} días · ${h.registros.length} días en total</div>
-      <div class="mini">${enHorario(h)}</div>${subir(h)}
-      ${h.goalId ? '' : `<div class="elegir-momento" data-pregunta="${h.id}" hidden><b class="mini">¿Cuándo lo quieres hacer?</b>${botonesMomento('manana', `data-momento-horario="${h.id}" data-momento`)}</div>`}</div>
-      <button class="btn-icon" data-calendario="${h.id}" aria-label="Ver calendario">📅</button>
-      <button class="btn-icon" data-borrar="${h.id}" aria-label="Borrar">🗑</button></li>`).join('')}</ul></div>` : ''}
-    <form class="card">
-      <h3 style="margin-bottom:10px">O escribe el tuyo</h3>
-      <div class="fila"><input name="emoji" maxlength="4" placeholder="💧" style="width:64px;text-align:center">
-      <input name="titulo" required placeholder="Ej.: Estirar la espalda"></div>
-      <div class="grid2" style="margin-top:10px">
-        <label class="campo"><span>¿Cuándo?</span><select name="momento">${opciones([['manana', '☀️ Mañana'], ['tarde', '🌆 Tarde'], ['noche', '🌙 Noche']], 'manana')}</select></label>
-        <label class="campo"><span>¿Cuánto tiempo?</span><select name="min">${opciones([5, 10, 15, 20, 30, 45, 60].map(m => [m, fmtHoras(m)]), 10)}</select></label>
-      </div>
-      <button class="btn ancho">Añadir y ponerlo en el horario</button>
-    </form>`);
-  el.querySelector('form').addEventListener('submit', async e => {
-    e.preventDefault();
-    const d = formData(e.target);
-    const { habito } = await crearHabito({ titulo: d.titulo, emoji: d.emoji || '✨', min: Number(d.min), veces: 7 }, d.momento);
-    close(); refrescar();
-    setTimeout(() => mostrarHabitoCreado(habito), 260);
-  });
-  el.querySelector('#descubrir').addEventListener('click', () => { close(); setTimeout(abrirCatalogoHabitos, 260); });
-  el.querySelectorAll('[data-subir]').forEach(b => b.addEventListener('click', async () => {
-    // El nuevo reto va a la misma hora del día que el hábito que ya domina.
-    const momento = habits.find(h => h.id === b.dataset.momentoDe)?.momento;
-    const sig = siguienteNivel(habits.find(h => h.id === b.dataset.momentoDe).catalogo);
-    const { habito } = await crearHabito(sig, momento || sig.cuando);
-    close(); refrescar();
-    setTimeout(() => mostrarHabitoCreado(habito), 260);
-  }));
-  el.querySelectorAll('[data-horario]').forEach(b => b.addEventListener('click', () => {
-    el.querySelector(`[data-pregunta="${b.dataset.horario}"]`).hidden = false;
-    b.hidden = true;
-  }));
-  el.querySelectorAll('[data-momento-horario]').forEach(b => b.addEventListener('click', async () => {
-    const h = habits.find(x => x.id === b.dataset.momentoHorario);
-    await ponerEnHorario(h, b.dataset.momento);
-    toast(`📅 «${h.titulo}» ya está en tu horario`);
-    close(); refrescar();
-  }));
-  el.querySelectorAll('[data-calendario]').forEach(b => b.addEventListener('click', () => { close(); setTimeout(() => abrirCalendarioHabito(b.dataset.calendario), 260); }));
-  el.querySelectorAll('[data-borrar]').forEach(b => b.addEventListener('click', async () => {
-    if (!confirm('¿Borrar este hábito, su racha y sus bloques del horario?')) return;
-    await borrarHabito(habits.find(h => h.id === b.dataset.borrar));
-    close(); refrescar();
-  }));
 }

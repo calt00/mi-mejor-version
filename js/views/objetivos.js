@@ -5,6 +5,7 @@ import { esc, sheet, formData, toast, refrescar, uid, hoyISO, weekDates, fmtHora
 import { sesionDe } from '../configuracion.js';
 import { duracionMin } from './comun.js';
 import { primerosPasos } from '../interprete.js';
+import { filaHabitosHTML, conectarFilaHabitos, gestionarHabitos, abrirCatalogoHabitos } from './habitos.js';
 
 let verArchivados = false;
 
@@ -17,12 +18,15 @@ function progreso(g, tasks, blocks) {
 }
 
 export async function render(root) {
-  const [goals, tasks, blocks] = await Promise.all([db.all('goals'), db.all('tasks'), db.all('blocks')]);
-  const lista = goals.filter(g => !!g.archivado === verArchivados)
+  const [goals, tasks, blocks, habits] = await Promise.all([db.all('goals'), db.all('tasks'), db.all('blocks'), db.all('habits')]);
+  const lista = goals.filter(g => !g.esHabito && !!g.archivado === verArchivados)
     .sort((a, b) => (b.prioridad - a.prioridad) || a.titulo.localeCompare(b.titulo));
-  const archivados = goals.filter(g => g.archivado).length;
+  const archivados = goals.filter(g => !g.esHabito && g.archivado).length;
 
   root.innerHTML = `
+    ${verArchivados ? '' : `<div class="seccion" style="margin-top:4px"><h2>Hábitos</h2><button class="btn sec chico" id="habitos">${habits.length ? 'Gestionar' : '+ Hábito'}</button></div>
+    ${habits.length ? filaHabitosHTML(habits) : '<div class="card vacio">Pequeños hábitos diarios (beber agua, caminar, leer…) y mantén tu racha. 🔥<div class="acciones" style="justify-content:center"><button class="btn chico" id="habitos-descubrir">✨ Descubrir hábitos</button></div></div>'}
+    <div class="seccion"><h2>Objetivos</h2></div>`}
     ${lista.length ? lista.map(g => {
       const p = progreso(g, tasks, blocks);
       const pctH = p.objetivoMin ? Math.min(100, p.hechoMin / p.objetivoMin * 100) : 0;
@@ -43,6 +47,9 @@ export async function render(root) {
     ${archivados || verArchivados ? `<div class="centro"><button class="btn gris chico" id="archivo">${verArchivados ? '← Ver activos' : `Ver archivados (${archivados})`}</button></div>` : ''}
     <button class="fab" data-nuevo aria-label="Nuevo objetivo">+</button>`;
 
+  conectarFilaHabitos(root, habits);
+  root.querySelector('#habitos')?.addEventListener('click', () => gestionarHabitos(habits));
+  root.querySelector('#habitos-descubrir')?.addEventListener('click', abrirCatalogoHabitos);
   root.querySelectorAll('[data-nuevo]').forEach(b => b.addEventListener('click', () => editarObjetivo()));
   root.querySelector('#archivo')?.addEventListener('click', () => { verArchivados = !verArchivados; refrescar(); });
   root.querySelectorAll('[data-goal]').forEach(el => el.addEventListener('click', () => detalle(goals.find(g => g.id === el.dataset.goal))));

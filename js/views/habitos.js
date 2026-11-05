@@ -2,9 +2,11 @@
 // alternativas para probar dentro de cada propósito y sugerencias al azar. Al añadir uno se pregunta
 // cuándo hacerlo, se pone en el horario y se enseñan los pensamientos que ayudan a cumplirlo.
 import { db } from '../db.js';
-import { esc, sheet, toast, refrescar, fmtHoras } from '../util.js';
-import { FAMILIAS, CATEGORIAS_HABITO, DIFICULTAD, COSTE, filtrar, sugerir, habitoPorId, pensamientosDe } from '../habitos.js';
-import { crearHabito, MOMENTOS_HABITO } from '../rutinas.js';
+import { esc, sheet, toast, refrescar, fmtHoras, formData, opciones, hoyISO } from '../util.js';
+import { FAMILIAS, CATEGORIAS_HABITO, DIFICULTAD, COSTE, filtrar, sugerir, habitoPorId, pensamientosDe, siguienteNivel } from '../habitos.js';
+import { crearHabito, ponerEnHorario, borrarHabito, marcarHabito, MOMENTOS_HABITO } from '../rutinas.js';
+import { racha } from './comun.js';
+import { abrirCalendarioHabito } from './progreso.js';
 
 const ETIQUETA_DIF = Object.fromEntries(DIFICULTAD), ETIQUETA_COSTE = Object.fromEntries(COSTE);
 const CLASE_DIF = { 1: 'verde', 2: 'naranja', 3: 'rojo' };
@@ -89,4 +91,87 @@ export async function abrirCatalogoHabitos() {
     }));
   }
   pintar();
+}
+
+/** Fila de hábitos para marcar el de hoy con un toque (sirve en «Objetivos» y en «Hoy»). */
+export function filaHabitosHTML(habits, hoy = hoyISO()) {
+  return `<div class="habitos">${habits.map(h => {
+    const on = h.registros.includes(hoy), r = racha(h);
+    return `<div class="habito ${on ? 'on' : ''}" data-habito="${h.id}" role="button" aria-pressed="${on}">
+      <div class="e">${esc(h.emoji || '✨')}</div><div class="t">${esc(h.titulo)}</div><div class="r">${r ? `🔥 ${r}` : '&nbsp;'}</div></div>`;
+  }).join('')}</div>`;
+}
+
+export function conectarFilaHabitos(root, habits, hoy = hoyISO()) {
+  root.querySelectorAll('[data-habito]').forEach(el => el.addEventListener('click', async () => {
+    const h = habits.find(x => x.id === el.dataset.habito);
+    const on = h.registros.includes(hoy);
+    await marcarHabito(h, hoy, !on);
+    h.registros = on ? h.registros.filter(d => d !== hoy) : [...h.registros, hoy];
+    if (!on) { navigator.vibrate?.(30); const r = racha(h); if (r > 1) toast(`🔥 ¡Racha de ${r} días!`); }
+    refrescar();
+  }));
+}
+
+export function gestionarHabitos(habits) {
+  const tiene = new Set(habits.map(h => h.catalogo).filter(Boolean));
+  // Tras una semana seguida, se propone la alternativa más retadora del mismo propósito.
+  const subir = h => {
+    const sig = h.catalogo && racha(h) >= 7 ? siguienteNivel(h.catalogo) : null;
+    return sig && !tiene.has(sig.id) ? `<button class="btn sec chico" style="margin-top:6px" data-subir="${sig.id}" data-momento-de="${h.id}">⬆️ ¿Subir de nivel? ${esc(sig.emoji)} ${esc(sig.titulo)}</button>` : '';
+  };
+  const MOMENTO = { manana: 'por la mañana', tarde: 'por la tarde', noche: 'por la noche' };
+  const enHorario = h => (h.goalId ? `📅 ${frecuenciaTxt(h.veces || 7)} ${MOMENTO[h.momento] || ''}`
+    : `<button class="btn gris chico" style="margin-top:6px" data-horario="${h.id}">📅 Ponerlo en el horario</button>`);
+  const { el, close } = sheet('Hábitos', `
+    <button class="btn ancho" id="descubrir" style="margin-bottom:12px">✨ Descubrir hábitos saludables</button>
+    ${habits.length ? `<div class="card plano"><ul class="lista">${habits.map(h => `
+      <li><span style="font-size:24px">${esc(h.emoji || '✨')}</span><div class="grow"><div class="t">${esc(h.titulo)}</div>
+      <div class="mini">🔥 Racha: ${racha(h)} días · ${h.registros.length} días en total</div>
+      <div class="mini">${enHorario(h)}</div>${subir(h)}
+      ${h.goalId ? '' : `<div class="elegir-momento" data-pregunta="${h.id}" hidden><b class="mini">¿Cuándo lo quieres hacer?</b>${botonesMomento('manana', `data-momento-horario="${h.id}" data-momento`)}</div>`}</div>
+      <button class="btn-icon" data-calendario="${h.id}" aria-label="Ver calendario">📅</button>
+      <button class="btn-icon" data-borrar="${h.id}" aria-label="Borrar">🗑</button></li>`).join('')}</ul></div>` : ''}
+    <form class="card">
+      <h3 style="margin-bottom:10px">O escribe el tuyo</h3>
+      <div class="fila"><input name="emoji" maxlength="4" placeholder="💧" style="width:64px;text-align:center">
+      <input name="titulo" required placeholder="Ej.: Estirar la espalda"></div>
+      <div class="grid2" style="margin-top:10px">
+        <label class="campo"><span>¿Cuándo?</span><select name="momento">${opciones([['manana', '☀️ Mañana'], ['tarde', '🌆 Tarde'], ['noche', '🌙 Noche']], 'manana')}</select></label>
+        <label class="campo"><span>¿Cuánto tiempo?</span><select name="min">${opciones([5, 10, 15, 20, 30, 45, 60].map(m => [m, fmtHoras(m)]), 10)}</select></label>
+      </div>
+      <button class="btn ancho">Añadir y ponerlo en el horario</button>
+    </form>`);
+  el.querySelector('form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const d = formData(e.target);
+    const { habito } = await crearHabito({ titulo: d.titulo, emoji: d.emoji || '✨', min: Number(d.min), veces: 7 }, d.momento);
+    close(); refrescar();
+    setTimeout(() => mostrarHabitoCreado(habito), 260);
+  });
+  el.querySelector('#descubrir').addEventListener('click', () => { close(); setTimeout(abrirCatalogoHabitos, 260); });
+  el.querySelectorAll('[data-subir]').forEach(b => b.addEventListener('click', async () => {
+    // El nuevo reto va a la misma hora del día que el hábito que ya domina.
+    const momento = habits.find(h => h.id === b.dataset.momentoDe)?.momento;
+    const sig = siguienteNivel(habits.find(h => h.id === b.dataset.momentoDe).catalogo);
+    const { habito } = await crearHabito(sig, momento || sig.cuando);
+    close(); refrescar();
+    setTimeout(() => mostrarHabitoCreado(habito), 260);
+  }));
+  el.querySelectorAll('[data-horario]').forEach(b => b.addEventListener('click', () => {
+    el.querySelector(`[data-pregunta="${b.dataset.horario}"]`).hidden = false;
+    b.hidden = true;
+  }));
+  el.querySelectorAll('[data-momento-horario]').forEach(b => b.addEventListener('click', async () => {
+    const h = habits.find(x => x.id === b.dataset.momentoHorario);
+    await ponerEnHorario(h, b.dataset.momento);
+    toast(`📅 «${h.titulo}» ya está en tu horario`);
+    close(); refrescar();
+  }));
+  el.querySelectorAll('[data-calendario]').forEach(b => b.addEventListener('click', () => { close(); setTimeout(() => abrirCalendarioHabito(b.dataset.calendario), 260); }));
+  el.querySelectorAll('[data-borrar]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('¿Borrar este hábito, su racha y sus bloques del horario?')) return;
+    await borrarHabito(habits.find(h => h.id === b.dataset.borrar));
+    close(); refrescar();
+  }));
 }
