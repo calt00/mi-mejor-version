@@ -427,11 +427,26 @@
     prueba('Horario: trabajo, clases y trayectos se ven en el día', () => {
       const config = { ...estadoInicial(), trabaja: true, tipoHorario: 'fijo', fijo: { dias: [0, 1, 2, 3, 4], tramos: [{ inicio: '09:00', fin: '17:00' }] }, trayecto: 30, estudia: true, estudio: { dias: [0], inicio: '18:00', fin: '20:00' }, trayectoEstudio: 20 };
       const lunes = compromisosDelDia({ config, turnos: null, fecha: '2026-11-02' });
-      igual(lunes.map(c => `${c.inicio}-${c.fin} ${c.titulo}`).join(' | '), '08:30-09:00 Ir al trabajo | 09:00-17:00 Trabajo | 17:00-17:30 Volver a casa | 17:40-18:00 Ir a clase | 18:00-20:00 Estudios | 20:00-20:20 Volver a casa');
+      igual(lunes.map(c => `${c.inicio}-${c.fin} ${c.titulo}`).join(' | '), '08:00-08:00 Levantarte | 08:30-09:00 Ir al trabajo | 09:00-17:00 Trabajo | 17:00-17:30 Volver a casa | 17:40-18:00 Ir a clase | 18:00-20:00 Estudios | 20:00-20:20 Volver a casa');
       igual(compromisosDelDia({ config, turnos: null, fecha: '2026-11-03' }).some(c => c.que === 'estudio'), false, 'el martes no hay clase');
-      igual(compromisosDelDia({ config, turnos: null, fecha: '2026-11-07' }).length, 0, 'el sábado no hay nada');
-      igual(compromisosDelDia({ config, turnos: null, fecha: '2026-11-02', libres: { '2026-11-02': { modo: 'libre' } } }).length, 0, 'un día libre no tiene trabajo ni clase');
+      igual(compromisosDelDia({ config, turnos: null, fecha: '2026-11-07' }).map(c => c.tipo).join(), 'despertar', 'el sábado solo te levantas');
+      igual(compromisosDelDia({ config, turnos: null, fecha: '2026-11-02', libres: { '2026-11-02': { modo: 'libre' } } }).map(c => c.tipo).join(), 'despertar', 'un día libre no tiene trabajo ni clase');
       igual(compromisosDelDia({ config: null, turnos: null, fecha: '2026-11-02' }).length, 0, 'sin cuestionario, nada');
+    });
+
+    prueba('Horario: la hora de levantarte aparece y se adapta al día', () => {
+      const base = { ...estadoInicial(), trabaja: true, tipoHorario: 'fijo', fijo: { dias: [0, 1, 2, 3, 4], tramos: [{ inicio: '09:00', fin: '17:00' }] }, trayecto: 30, levantar: '08:00' };
+      const desp = (config, fecha, extra = {}) => compromisosDelDia({ config, turnos: null, fecha, ...extra }).find(c => c.tipo === 'despertar').inicio;
+      igual(desp(base, '2026-11-02'), '08:00', 'tu hora de siempre');
+      igual(desp({ ...base, levantar: '08:30' }, '2026-11-02'), '07:40', 'si entras pronto, te levantas antes para llegar con tiempo');
+      igual(desp({ ...base, levantar: '08:30' }, '2026-11-07'), '08:30', 'el sábado, la de siempre');
+      const plan = { inicio: '2026-11-02', perfiles: [{ clave: 'general', acostar: '04:00', levantar: '12:00', plan: { pasos: [{ acostar: '03:15', levantar: '11:15' }, { acostar: '02:30', levantar: '10:30' }] } }] };
+      igual(desp(base, '2026-11-02', { plan }), '11:15', 'el plan de sueño manda: semana 1');
+      igual(desp(base, '2026-11-09', { plan }), '10:30', 'semana 2');
+      igual(desp(base, '2026-10-30', { plan }), '08:00', 'antes de empezar el plan, la de siempre');
+      const t = { ...estadoInicial(), trabaja: true, tipoHorario: 'turnos', trayecto: 30 };
+      const turnos = libresDe({ ...t, turnos: { ...t.turnos, actual: 'manana' } }, '2026-11-02').turnos;
+      igual(compromisosDelDia({ config: t, turnos, fecha: '2026-11-03' }).find(c => c.tipo === 'despertar').inicio, t.suenoTurnos[turnos.patron[0]].levantar, 'con turnos, la hora de ese turno');
     });
 
     prueba('Horario: el turno de noche acaba al día siguiente y la vuelta cae en la mañana', () => {

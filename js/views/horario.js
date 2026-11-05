@@ -26,8 +26,9 @@ export async function render(root) {
 
   const dia = f => {
     const bs = visibles.filter(b => b.fecha === f), cs = comp.de(f);
-    return bs.length || cs.length ? `<div class="bloques">${diaHTML(bs, cs, goalsById)}</div>`
-      : `<div class="card vacio" style="padding:14px">${comp.libres[f] ? '🏖️ Día libre' : 'Sin bloques'}${f >= hoy ? ` · <a href="#" data-anadir="${f}">añadir</a>` : ''}</div>`;
+    const vacio = !bs.length && cs.every(c => c.tipo === 'despertar');
+    return `${cs.length || bs.length ? `<div class="bloques">${diaHTML(bs, cs, goalsById)}</div>` : ''}${vacio
+      ? `<div class="card vacio" style="padding:14px;margin-top:8px">${comp.libres[f] ? '🏖️ Día libre' : 'Sin bloques'}${f >= hoy ? ` · <a href="#" data-anadir="${f}">añadir</a>` : ''}</div>` : ''}`;
   };
   const etiquetaLibre = f => (comp.libres[f] ? `<span class="dia-libre-tag">🏖️ Día libre · ${MOTIVO_TXT[comp.libres[f].motivo]}</span>` : '');
 

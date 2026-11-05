@@ -37,12 +37,13 @@ export function momentoBloque(b) {
 
 /** Carga lo necesario para pintar trabajo, clases y trayectos: devuelve de(fecha) y el mapa de días libres. */
 export async function cargarCompromisos() {
-  const [config, turnos, libres] = await Promise.all([kvGet('configuracion'), kvGet('turnos'), kvGet('diasLibres', {})]);
-  return { libres, de: fecha => compromisosDelDia({ config, turnos, fecha, libres }) };
+  const [config, turnos, libres, plan] = await Promise.all([kvGet('configuracion'), kvGet('turnos'), kvGet('diasLibres', {}), kvGet('planSueno')]);
+  return { libres, de: fecha => compromisosDelDia({ config, turnos, fecha, libres, plan }) };
 }
 
 /** Una tarjeta de trabajo, clase o trayecto: se ve en el horario pero no se marca (no cuenta en el progreso). */
 export function compromisoHTML(c) {
+  if (c.tipo === 'despertar') return `<div class="bloque compromiso despertar"><div class="hora"><b>${c.inicio}</b></div><div class="grow"><div class="t">☀️ ${esc(c.titulo)}</div></div></div>`;
   const icono = c.tipo === 'trayecto' ? (c.sentido === 'ida' ? '🚌' : '🏠') : c.que === 'estudio' ? '📚' : '💼';
   const n = nowMin(), ini = toMin(c.inicio), fin = toMin(c.fin);
   const ahora = c.fecha === hoyISO() && n >= ini && (fin > ini ? n < fin : true);

@@ -529,3 +529,5 @@ details summary { cursor: pointer; color: var(--accent); }
 .stepper .min-input { width: 64px; padding: 8px 4px; text-align: center; font-weight: 700; background: transparent; border: 0; border-radius: 8px; -moz-appearance: textfield; }
 .stepper .min-input::-webkit-outer-spin-button, .stepper .min-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .hora-sug { width: 124px !important; padding: 7px 8px; }
+.bloque.compromiso.despertar { border-left-color: var(--yellow); }
+.bloque.compromiso.despertar .t { color: var(--text); font-weight: 700; }
