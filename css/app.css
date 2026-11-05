@@ -635,3 +635,8 @@ details summary { cursor: pointer; color: var(--accent); }
 .hero-dia { position: relative; }
 .hero-dia > .huevo-frase { top: -2px; max-width: 280px; z-index: 5; }
 .hero-dia > .chispas { inset: 0; z-index: 4; }
+
+.comp-fila { display: flex; gap: 14px; align-items: center; }
+.comp-dibujo { flex: none; width: 92px; display: grid; place-items: center; background: none; border: 0; padding: 0; cursor: pointer; }
+.comp-dibujo .huevo-svg { width: 58px; }
+.comp-dibujo .cr-svg { width: 92px; }

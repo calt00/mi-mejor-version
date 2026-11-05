@@ -1,7 +1,8 @@
 // Pantallas de tu huevo y tu compañero: el círculo de «Hoy», elegir huevo, el detalle y la eclosión con su nombre.
-import { kvGet, kvSet } from '../db.js';
+import { db, kvGet, kvSet } from '../db.js';
 import { esc, sheet, toast, refrescar, hoyISO, fmtFecha } from '../util.js';
-import { HUEVOS, huevoPorId, fraseAlTocar } from '../huevo.js';
+import { HUEVOS, huevoPorId, fraseAlTocar, estadoHuevo, etapaCriatura } from '../huevo.js';
+import { progresoDiario } from '../progreso.js';
 import { huevoSVG, huevoMisterioSVG, huevoMitadesSVG, criaturaSVG } from '../criaturas.js';
 
 export const getHuevo = () => kvGet('huevo', null);
@@ -66,7 +67,7 @@ export async function abrirElegirHuevo() {
   const actual = await getHuevo();
   const { el, close } = sheet('🥚 Elige tu huevo', `
     <p class="sub">Cada día que cumplas lo suficiente, lo calentarás. Cuanto más difícil, más tardará en abrirse… y más especial será lo que salga. No te diré qué hay dentro.</p>
-    ${actual && !actual.eclosion ? '<div class="aviso">Si eliges otro huevo, empiezas de cero con él.</div>' : ''}
+    ${actual ? `<div class="aviso">${actual.eclosion ? 'Tu compañero actual pasará a «Tus compañeros» con la etapa que tenga, y empiezas de cero con el nuevo huevo.' : 'Si eliges otro huevo, empiezas de cero con él.'}</div>` : ''}
     <div class="huevos-lista">${HUEVOS.map(h => `
       <button type="button" class="huevo-opcion" data-elegir="${h.id}">
         <div class="hv">${huevoSVG(h.id, 0)}</div>
@@ -86,7 +87,7 @@ function confirmarElegir(id, cerrarLista) {
   el.querySelector('#no').addEventListener('click', close);
   el.querySelector('#si').addEventListener('click', async () => {
     const anterior = await getHuevo();
-    const coleccion = [...(anterior?.coleccion || []), ...(anterior?.eclosion ? [{ id: anterior.id, nombre: anterior.nombre, eclosion: anterior.eclosion, etapa: anterior.etapa || 1 }] : [])];
+    const coleccion = [...(anterior?.coleccion || []), ...(anterior?.eclosion ? [{ id: anterior.id, nombre: anterior.nombre, eclosion: anterior.eclosion, etapa: etapaCriatura(anterior.pico || 0, huevoPorId(anterior.id)?.requisito || 7) }] : [])];
     await guardar({ id, inicio: hoyISO(), eclosion: null, nombre: '', pico: 0, coleccion });
     close(); cerrarLista(); refrescar();
     toast(`🥚 ${h.nombre} empieza a calentarse. ¡Cuídalo cada día!`, 3500);
@@ -122,7 +123,7 @@ export async function abrirHuevo(estado) {
         <div><b>${estado.malos}</b><span class="mini">días flojos</span></div></div>
       <div class="nota"><b>Cómo se calienta:</b> cada día que cumples el <b>${def.umbral} %</b> o más suma 1 de calor, y si encadenas días buenos suma hasta el doble. Un día flojo lo enfría medio punto. Los días libres no cuentan ni restan.</div>
       <div class="acciones"><button class="btn gris chico" id="cambiar">Cambiar de huevo</button></div>`;
-  const coleccion = (huevo.coleccion || []).length ? `<h3 style="margin:18px 4px 8px">Tus compañeros</h3><div class="coleccion">${huevo.coleccion.map(c => `<div class="col-item">${criaturaSVG(c.id, 3, 'feliz')}<b>${esc(c.nombre || 'Sin nombre')}</b></div>`).join('')}</div>` : '';
+  const coleccion = (huevo.coleccion || []).length ? `<h3 style="margin:18px 4px 8px">Tus compañeros</h3><div class="coleccion">${huevo.coleccion.map(c => `<div class="col-item">${criaturaSVG(c.id, c.etapa || 3, 'feliz')}<b>${esc(c.nombre || 'Sin nombre')}</b></div>`).join('')}</div>` : '';
   const { el, close } = sheet(estado.eclosionado ? '🌟 Tu compañero' : '🥚 Tu huevo', `<div class="huevo-escena" id="escena">${dibujo}</div>${cuerpo}${coleccion}`);
   const escena = el.querySelector('#escena');
   escena.addEventListener('click', () => reaccionar(escena, estado));
@@ -213,4 +214,48 @@ export async function comprobarEclosion(estado) {
   }
   // Si sube de pico, se recuerda (las etapas de la criatura no retroceden).
   if (estado.eclosionado && estado.pico > (huevo.pico || 0)) await guardar({ ...huevo, pico: estado.pico });
+}
+
+// ---------------------------------------------------------------------------------------------------
+/** Carga el huevo y calcula su estado actual (para «Perfil», fuera de «Hoy»). */
+export async function cargarEstadoHuevo() {
+  const huevo = await getHuevo();
+  if (!huevo) return { huevo: null, estado: null };
+  const hoy = hoyISO();
+  const [blocks, habits, tasks, inicioApp, libres] = await Promise.all([db.all('blocks'), db.all('habits'), db.all('tasks'), kvGet('inicioApp', hoy), kvGet('diasLibres', {})]);
+  const serie = progresoDiario({ blocks, habits, tasks, desde: huevo.inicio, hasta: hoy, inicioApp, libres });
+  return { huevo, estado: estadoHuevo({ huevo, serie, hoy }) };
+}
+
+/** Tarjeta de «Perfil»: tu huevo o compañero, y todo lo que se puede hacer con él. */
+export function tarjetaCompaneroHTML({ huevo, estado }) {
+  const coleccion = (huevo?.coleccion || []).length
+    ? `<h4 style="margin:16px 0 8px">Tus compañeros</h4><div class="coleccion">${huevo.coleccion.map(c => `<div class="col-item">${criaturaSVG(c.id, c.etapa || 3, 'feliz')}<b>${esc(c.nombre || 'Sin nombre')}</b></div>`).join('')}</div>` : '';
+  if (!estado) return `<div class="card"><h3 style="margin-bottom:8px">🥚 Tu compañero</h3>
+    <div class="comp-fila"><div class="comp-dibujo">${huevoMisterioSVG()}</div>
+      <div><p class="sub" style="margin:0 0 8px">Elige un huevo y cuídalo con tu constancia: si lo calientas cada día, un día eclosionará.</p>
+      <button class="btn chico" id="comp-cambiar">Elegir mi huevo</button></div></div>${coleccion}</div>`;
+  const e = estado;
+  const dibujo = e.eclosionado ? criaturaSVG(e.def.id, e.etapaCriatura, e.humor) : huevoSVG(e.def.id, e.etapaHuevo);
+  const datos = e.eclosionado
+    ? `<b style="font-size:18px">${esc(e.nombre || 'Sin nombre')}</b><div class="mini">${['', 'Cría', 'Joven', 'Adulto'][e.etapaCriatura]} · etapa ${e.etapaCriatura} de 3</div>`
+    : `<b style="font-size:18px">Huevo ${esc(e.def.nombre)}</b><div class="mini">Calor ${num(e.calor)} de ${e.def.requisito} · ${e.faltan <= 1 ? '¡a punto de abrirse!' : `unos ${e.faltan} días`}</div>`;
+  const barra = e.eclosionado ? (e.siguiente ? Math.min(100, Math.round((e.pico - e.siguiente.desde) / (e.siguiente.hasta - e.siguiente.desde) * 100)) : 100) : Math.round(e.fraccion * 100);
+  return `<div class="card"><h3 style="margin-bottom:8px">${e.eclosionado ? '🌟' : '🥚'} Tu compañero</h3>
+    <div class="comp-fila"><button type="button" class="comp-dibujo" id="comp-ver" aria-label="Ver mi compañero">${dibujo}</button>
+      <div class="grow" style="flex:1">${datos}<div class="barra" style="margin-top:8px"><i style="width:${barra}%"></i></div></div></div>
+    <div class="acciones">
+      <button class="btn sec chico" id="comp-ver2">Verlo</button>
+      ${e.eclosionado ? `<button class="btn gris chico" id="comp-nombre">✏️ ${e.nombre ? 'Cambiar nombre' : 'Ponerle nombre'}</button>` : ''}
+      <button class="btn gris chico" id="comp-cambiar">${e.eclosionado ? '🥚 Empezar con otro huevo' : 'Cambiar de huevo'}</button>
+    </div>${coleccion}</div>`;
+}
+
+export function conectarCompanero(root, { estado }) {
+  root.querySelector('#comp-ver')?.addEventListener('click', () => estado && abrirHuevo(estado));
+  root.querySelector('#comp-ver2')?.addEventListener('click', () => estado && abrirHuevo(estado));
+  root.querySelector('#comp-nombre')?.addEventListener('click', () => pedirNombre(estado, { tituloCorto: true }));
+  root.querySelector('#comp-cambiar')?.addEventListener('click', () => {
+    if (!estado || estado.eclosionado || confirm('Si cambias de huevo, empiezas de cero con el nuevo. ¿Seguro?')) abrirElegirHuevo();
+  });
 }

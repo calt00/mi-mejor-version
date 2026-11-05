@@ -5,10 +5,13 @@ import { esc, formData, toast, refrescar, sheet, miniMarkdown, hoyISO, opciones,
 import { mostrarBienvenida } from './bienvenida.js';
 import { abrirPlan } from './plan.js';
 import { abrirConfigurador } from './configurar.js';
+import { cargarEstadoHuevo, tarjetaCompaneroHTML, conectarCompanero } from './huevo.js';
 import { tarjetaSuenoHTML, abrirPlanSueno, conectarAjustesSueno, tarjetaDespertarHTML, conectarDespertar } from './sueno.js';
 
 export async function render(root) {
   const [p, s, ultimaCopia, situacion] = await Promise.all([getProfile(), getSettings(), kvGet('ultimaCopia'), kvGet('miSituacion')]);
+  const datosHuevo = await cargarEstadoHuevo();
+  const companeroTarjeta = tarjetaCompaneroHTML(datosHuevo);
   const suenoTarjeta = (await tarjetaDespertarHTML()) + (await tarjetaSuenoHTML());
   let persistente = null;
   try { persistente = await navigator.storage?.persisted?.(); } catch { /* sin soporte */ }
@@ -17,6 +20,7 @@ export async function render(root) {
   root.innerHTML = `
     ${!instalada ? `<div class="aviso">📱 <b>Instálala en tu iPhone</b>: en Safari pulsa Compartir → «Añadir a pantalla de inicio». Así se abre como una app y tus datos quedan a salvo. <a href="#" data-guia="acceso-rapido">Ver cómo</a></div>` : ''}
 
+    ${companeroTarjeta}
     <div class="card">
       <h3 style="margin-bottom:4px">📝 Tu horario y tus objetivos</h3>
       <p class="mini" style="margin-bottom:10px">Si cambia tu trabajo, tus horas o lo que quieres conseguir, vuelve a responder las preguntas y rehago tu horario.</p>
@@ -95,6 +99,7 @@ export async function render(root) {
   root.querySelectorAll('[data-guia]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); abrirGuia(b.dataset.guia); }));
   root.querySelector('#exportar').addEventListener('click', async () => { if (await exportar()) refrescar(); });
   root.querySelector('#bienvenida').addEventListener('click', mostrarBienvenida);
+  conectarCompanero(root, datosHuevo);
   conectarDespertar(root, toast);
   root.querySelector('#ver-sueno')?.addEventListener('click', abrirPlanSueno);
   root.querySelector('#mejorar-sueno')?.addEventListener('click', abrirConfigurador);
