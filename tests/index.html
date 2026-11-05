@@ -25,6 +25,8 @@
     import { logrosCumplidos, LOGROS } from '../js/logros.js';
     import { compromisosDelDia } from '../js/compromisos.js';
 import { rachaActual, mejorRachaDe } from '../js/rachas.js';
+    import { HUEVOS, calorHuevo, etapaHuevo, etapaCriatura, tramoSiguiente, diasHastaEclosion, humorCriatura, estadoHuevo, fraseAlTocar } from '../js/huevo.js';
+    import { huevoSVG, criaturaSVG, huevoMitadesSVG, ESPECIES_IDS } from '../js/criaturas.js';
     import { opinionDiaLibre, diasLibresRecientes, bloquesDeSugerencias, rutinaPara, solapes } from '../js/diasLibres.js';
     import { dormirMin, valorarSueno, planSueno, analizarSueno, acostarObjetivo, consejosSueno, recortarFranjas, acostarAbs, valorarHorario } from '../js/sueno.js';
     import { barrasSVG, calendarioHTML } from '../js/grafica.js';
@@ -309,7 +311,7 @@ import { rachaActual, mejorRachaDe } from '../js/rachas.js';
       igual(dia.planificados, 2, 'bloque + hábito sin hora'); igual(dia.hechos, 1); igual(dia.pct, 50);
     });
 
-    for (const vista of ['hoy', 'objetivos', 'habitos', 'sueno', 'configurar', 'revision', 'perfil', 'progreso', 'horario', 'ahorro', 'asistente']) {
+    for (const vista of ['hoy', 'objetivos', 'habitos', 'sueno', 'huevo', 'configurar', 'revision', 'perfil', 'progreso', 'horario', 'ahorro', 'asistente']) {
       try { await import(`../js/views/${vista}.js`); prueba(`La pantalla «${vista}» carga sin errores`, () => {}); }
       catch (e) { prueba(`La pantalla «${vista}» carga sin errores`, () => { throw e; }); }
     }
@@ -523,6 +525,71 @@ import { rachaActual, mejorRachaDe } from '../js/rachas.js';
       igual(mejorRachaDe(['2026-11-01', '2026-11-05'], { '2026-11-02': { modo: 'libre' }, '2026-11-03': { modo: 'libre' }, '2026-11-04': { modo: 'libre' } }), 2, 'varios días libres seguidos tampoco la rompen');
       igual(mejorRachaDe(['2026-11-01', '2026-11-05'], { '2026-11-02': { modo: 'libre' } }), 1, 'pero un hueco sin cubrir sí');
       igual(rachaActual([], '2026-11-05', libres), 0);
+    });
+
+    const dias = (pcts, desde = '2026-11-01') => pcts.map((pct, i) => ({ fecha: addDays(desde, i), pct }));
+
+    prueba('Huevo: los días buenos lo calientan y encadenarlos da más', () => {
+      igual(calorHuevo(dias([60]), { umbral: 50, hoy: '2026-11-10' }).calor, 1, 'un día bueno suma 1');
+      igual(calorHuevo(dias([60, 60]), { umbral: 50, hoy: '2026-11-10' }).calor, 2.25, 'el segundo seguido suma 1,25');
+      igual(calorHuevo(dias([60, 60, 60, 60, 60]), { umbral: 50, hoy: '2026-11-10' }).calor, 1 + 1.25 + 1.5 + 1.75 + 2, 'sube hasta el doble');
+      igual(calorHuevo(dias(Array(8).fill(90)), { umbral: 50, hoy: '2026-11-20' }).calor > 8 * 1.5, true, 'una buena racha da casi el doble');
+    });
+
+    prueba('Huevo: un día flojo lo enfría, pero nunca por debajo de 0, y hoy no resta', () => {
+      const h = '2026-11-10';
+      igual(calorHuevo(dias([60, 20]), { umbral: 50, hoy: h }).calor, 0.5, 'un día flojo resta 0,5');
+      igual(calorHuevo(dias([20, 20, 20]), { umbral: 50, hoy: h }).calor, 0, 'no baja de 0');
+      igual(calorHuevo(dias([60, 60, 20, 60]), { umbral: 50, hoy: h }).racha, 1, 'el día flojo corta la racha');
+      igual(calorHuevo([{ fecha: h, pct: 10 }], { umbral: 50, hoy: h }).calor, 0, 'hoy, mientras no acabe, no cuenta como flojo');
+      igual(calorHuevo([{ fecha: h, pct: 80 }], { umbral: 50, hoy: h }).calor, 1, 'pero si hoy ya va bien, sí suma');
+    });
+
+    prueba('Huevo: los días libres y vacíos no cuentan ni restan', () => {
+      const r = calorHuevo(dias([60, null, null, 60]), { umbral: 50, hoy: '2026-11-10' });
+      igual(r.calor, 2.25, 'los días nulos (libres) se saltan y la racha sigue'); igual(r.buenos, 2); igual(r.malos, 0);
+    });
+
+    prueba('Huevo: cinco huevos, cada uno más difícil', () => {
+      igual(HUEVOS.length, 5);
+      igual(HUEVOS.every((h, i) => i === 0 || (h.requisito > HUEVOS[i - 1].requisito && h.umbral >= HUEVOS[i - 1].umbral && h.dificultad > HUEVOS[i - 1].dificultad)), true, 'más días y más exigente');
+      igual(HUEVOS.map(h => h.id).join(), ESPECIES_IDS.join(), 'cada huevo tiene su criatura');
+      igual(HUEVOS.some(h => /(^|[^a-záéíóúñ])(pájaro|pájaros|ave|aves|dragón|reptil|ala|alas|pluma|plumas|vuela|volar)([^a-záéíóúñ]|$)/i.test(h.nombre + ' ' + h.frase)), false, 'nada dice qué hay dentro');
+    });
+
+    prueba('Huevo: se ve más agrietado según se calienta y la criatura crece sin retroceder', () => {
+      igual([0, .1, .2, .5, .8, .95, 1].map(etapaHuevo).join(), '0,0,1,2,3,4,4');
+      igual(etapaCriatura(7, 7), 1); igual(etapaCriatura(14, 7), 2); igual(etapaCriatura(28, 7), 3); igual(etapaCriatura(27.9, 7), 2);
+      igual(tramoSiguiente(7, 7).hasta, 14); igual(tramoSiguiente(14, 7).hasta, 28); igual(tramoSiguiente(30, 7), null, 'ya es adulta');
+      igual(diasHastaEclosion(3, 7, 0), 4); igual(diasHastaEclosion(3, 7, 4), 2, 'con buena racha, antes'); igual(diasHastaEclosion(7, 7), 0);
+    });
+
+    prueba('Huevo: el ánimo depende de los últimos días', () => {
+      const h = '2026-11-10';
+      const serie = pcts => dias(pcts, '2026-11-06');
+      igual(humorCriatura(serie([80, 90, 70, 100]), h), 'feliz'); igual(humorCriatura(serie([10, 20, 0, 5]), h), 'dormido'); igual(humorCriatura(serie([50, 40, 60, 50]), h), 'normal');
+      igual(humorCriatura([], h), 'normal', 'sin datos, normal');
+    });
+
+    prueba('Huevo: estado completo (eclosión y nombre)', () => {
+      const h = '2026-11-20', huevo = { id: 'ascua', inicio: '2026-11-01', eclosion: null, nombre: '', pico: 0 };
+      const casi = estadoHuevo({ huevo, serie: dias(Array(4).fill(80)), hoy: h });
+      igual(casi.listo, false); igual(casi.eclosionado, false); igual(casi.faltan > 0, true);
+      const listo = estadoHuevo({ huevo, serie: dias(Array(7).fill(80)), hoy: h });
+      igual(listo.listo, true, '7 días buenos seguidos y eclosiona');
+      const nacido = estadoHuevo({ huevo: { ...huevo, eclosion: '2026-11-08', nombre: 'Chispa', pico: 12 }, serie: dias([10, 10, 10, 10, 10, 10, 10, 10]), hoy: h });
+      igual(nacido.eclosionado, true); igual(nacido.nombre, 'Chispa'); igual(nacido.listo, false); igual(nacido.pico, 12, 'no retrocede aunque haya días malos');
+      igual(estadoHuevo({ huevo: null, serie: [], hoy: h }), null, 'sin huevo elegido');
+      igual(typeof fraseAlTocar(casi, 0.3), 'string');
+    });
+
+    prueba('Dibujos: huevos y criaturas de las 5 especies se generan', () => {
+      for (const id of ESPECIES_IDS) {
+        for (const e of [0, 1, 2, 3, 4]) igual(huevoSVG(id, e).includes('<svg'), true, `huevo ${id} etapa ${e}`);
+        for (const e of [1, 2, 3]) for (const humor of ['feliz', 'normal', 'dormido']) igual(criaturaSVG(id, e, humor).includes('cr-svg'), true, `${id} ${e} ${humor}`);
+        igual(huevoMitadesSVG(id).includes('mitad-sup'), true);
+      }
+      igual(new Set([huevoSVG('ascua', 0), huevoSVG('ascua', 0)].map(x => x.match(/id="(cr\d+)/)?.[1])).size, 2, 'cada dibujo tiene sus propios ids (no chocan)');
     });
 
     prueba('Logros: se cumplen con los datos justos', () => {

@@ -11,6 +11,8 @@ import { comprobarLogros } from '../logros.js';
 import { abrirRevision, abrirRevisionDiaria } from './revision.js';
 import { exportar } from './perfil.js';
 import { filaHabitosHTML, conectarFilaHabitos } from './habitos.js';
+import { huevoCentroHTML, conectarHuevo, comprobarEclosion, getHuevo } from './huevo.js';
+import { estadoHuevo } from '../huevo.js';
 
 const DIAS_ENTRE_COPIAS = 7;
 
@@ -33,9 +35,9 @@ const aviso = (id, icono, texto, boton, extra = '') =>
 
 export async function render(root) {
   const hoy = hoyISO();
-  const [perfil, goals, blocks, habits, tasks, fin, revisiones, revisionesDia, ultimaCopia, copiaPospuesta, comp] = await Promise.all([
+  const [perfil, goals, blocks, habits, tasks, fin, revisiones, revisionesDia, ultimaCopia, copiaPospuesta, comp, huevo] = await Promise.all([
     getProfile(), db.all('goals'), db.all('blocks'), db.all('habits'), db.all('tasks'), datosFinanzas(),
-    kvGet('revisiones', []), kvGet('revisionesDia', []), kvGet('ultimaCopia'), kvGet('copiaPospuesta'), cargarCompromisos(),
+    kvGet('revisiones', []), kvGet('revisionesDia', []), kvGet('ultimaCopia'), kvGet('copiaPospuesta'), cargarCompromisos(), getHuevo(),
   ]);
   const libreHoy = comp.libres[hoy] || null;
   const descansando = libreHoy?.modo === 'libre'; // día libre de verdad: no cuenta en las estadísticas
@@ -54,6 +56,9 @@ export async function render(root) {
   // En un día libre, el círculo solo se llena con las sugerencias que se hagan (si las hay).
   const extras = deHoy.filter(b => b.extra);
   const pct = descansando ? (extras.length ? Math.round(extras.filter(b => b.hecho).length / extras.length * 100) : 0) : dia.pct ?? 0;
+  // Tu huevo (o tu compañero): se calienta con los días buenos desde que lo elegiste.
+  const serieHuevo = huevo ? progresoDiario({ blocks, habits, tasks, desde: huevo.inicio, hasta: hoy, inicioApp, libres: comp.libres }) : [];
+  const estadoH = estadoHuevo({ huevo, serie: serieHuevo, hoy });
   const actual = deHoy.find(b => momentoBloque(b) === 'ahora' && !b.hecho);
   const siguiente = deHoy.find(b => momentoBloque(b) === 'futuro' && !b.hecho);
 
@@ -67,15 +72,15 @@ export async function render(root) {
   root.innerHTML = `
     <p class="sub centro" style="margin:0 0 6px">${fmtFecha(hoy)} · ${esc(saludo(perfil.nombre))}</p>
 
-    <a class="hero-dia" href="#progreso" aria-label="Ver mi progreso">
+    <div class="hero-dia">
       <div class="anillo-grande ${pct >= 100 ? 'completo' : ''}" id="anillo" data-p="${pct}" style="--p:0">
         <div class="interior">
-          ${descansando ? `<span class="isla">🏖️</span><b style="font-size:34px">Día libre</b><span>${extras.length ? `${extras.filter(b => b.hecho).length} de ${extras.length} hechos` : 'no cuenta en tus estadísticas'}</span>`
-            : `${pct >= 100 ? '<span class="llama">🔥</span>' : ''}<b>${pct}%</b>
-          <span>${dia.planificados ? `${dia.hechos + dia.tareas} de ${dia.planificados} hechos` : 'nada planificado'}</span>`}
+          ${huevoCentroHTML(estadoH, { completo: pct >= 100 && !descansando })}
+          <a class="pct-mini" href="#progreso" aria-label="Ver mi progreso">${descansando ? `🏖️ Día libre${extras.length ? ` · ${extras.filter(b => b.hecho).length} de ${extras.length}` : ''}`
+            : `<b>${pct}%</b> · ${dia.planificados ? `${dia.hechos + dia.tareas} de ${dia.planificados}` : 'nada planificado'}`}</a>
         </div>
       </div>
-    </a>
+    </div>
     <p class="estado-dia">${estado}</p>
 
     ${libreHoy ? aviso('quitar-libre', '🏖️', `<b>Hoy es tu día libre</b> <span class="mini">(${esc(MOTIVO_TXT[libreHoy.motivo])}${libreHoy.modo === 'rutina' ? ' · haces tu rutina' : ''})</span>`, 'Quitar') : ''}
@@ -106,5 +111,7 @@ export async function render(root) {
   root.querySelector('#copia')?.addEventListener('click', async () => { if (await exportar()) refrescar(); });
   root.querySelector('#copia-luego')?.addEventListener('click', async () => { await kvSet('copiaPospuesta', addDays(hoy, 2)); refrescar(); });
 
+  conectarHuevo(root, estadoH);
+  comprobarEclosion(estadoH).catch(e => console.warn('Huevo:', e));
   comprobarLogros().catch(e => console.warn('Logros:', e));
 }

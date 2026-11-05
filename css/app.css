@@ -531,3 +531,103 @@ details summary { cursor: pointer; color: var(--accent); }
 .hora-sug { width: 124px !important; padding: 7px 8px; }
 .bloque.compromiso.despertar { border-left-color: var(--yellow); }
 .bloque.compromiso.despertar .t { color: var(--text); font-weight: 700; }
+
+/* ===== Tu huevo y tu compañero ===== */
+.huevo-btn { background: none; border: 0; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; color: inherit; }
+.huevo-btn .huevo-svg { width: 74px; height: auto; }
+.huevo-btn .cr-svg { width: 124px; height: auto; margin: -12px 0 -10px; }
+.huevo-nombre { font-size: 12px; font-weight: 800; letter-spacing: .02em; color: var(--text2); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.huevo-btn.por-elegir .huevo-nombre { color: var(--accent); }
+.huevo-btn.por-elegir .huevo-svg { animation: hv-pulso 2.4s ease-in-out infinite; }
+.huevo-btn.completo .huevo-svg, .huevo-btn.completo .cr-svg { filter: drop-shadow(0 0 10px rgba(255, 184, 0, .85)); }
+.huevo-svg, .cr-svg { overflow: visible; display: block; }
+.pct-mini { color: var(--text2); font-size: 14px; font-weight: 700; }
+.pct-mini b { font-size: 16px; background: var(--grad-fuego); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* El huevo se mueve solo, más y más a menudo cuanto más caliente está. */
+.hv-cuerpo { transform-origin: 50px 126px; }
+@keyframes hv-balanceo { 0%, 60%, 100% { transform: rotate(0); } 64% { transform: rotate(calc(var(--ang) * -1)); } 68% { transform: rotate(var(--ang)); } 72% { transform: rotate(calc(var(--ang) * -.7)); } 76% { transform: rotate(calc(var(--ang) * .5)); } 80% { transform: rotate(0); } }
+.huevo-svg.etapa-0 .hv-cuerpo { --ang: 3deg; animation: hv-balanceo 11s ease-in-out infinite; }
+.huevo-svg.etapa-1 .hv-cuerpo { --ang: 5deg; animation: hv-balanceo 8s ease-in-out infinite; }
+.huevo-svg.etapa-2 .hv-cuerpo { --ang: 7deg; animation: hv-balanceo 6s ease-in-out infinite; }
+.huevo-svg.etapa-3 .hv-cuerpo { --ang: 9deg; animation: hv-balanceo 4s ease-in-out infinite; }
+.huevo-svg.etapa-4 .hv-cuerpo { --ang: 12deg; animation: hv-balanceo 2.4s ease-in-out infinite; }
+.hv-brillo { animation: hv-latido 3s ease-in-out infinite; transform-origin: 50px 68px; }
+@keyframes hv-latido { 0%, 100% { transform: scale(.96); } 50% { transform: scale(1.05); } }
+.hv-luz-grieta { animation: hv-parpadeo 1.6s ease-in-out infinite; }
+@keyframes hv-parpadeo { 0%, 100% { opacity: .3; } 50% { opacity: .85; } }
+@keyframes hv-pulso { 0%, 100% { transform: scale(1); opacity: .85; } 50% { transform: scale(1.05); opacity: 1; } }
+.huevo-svg.tocado .hv-cuerpo { animation: hv-golpe .7s ease-out; }
+@keyframes hv-golpe { 0% { transform: rotate(0) scale(1); } 15% { transform: rotate(-12deg) scale(1.06); } 35% { transform: rotate(10deg) scale(1.04); } 55% { transform: rotate(-6deg); } 75% { transform: rotate(3deg); } 100% { transform: rotate(0) scale(1); } }
+
+/* La criatura respira, bate las alas, parpadea y reacciona. */
+.cr-cuerpo { transform-origin: 100px 170px; animation: cr-respira 3.2s ease-in-out infinite; }
+@keyframes cr-respira { 0%, 100% { transform: translateY(0) scaleY(1); } 50% { transform: translateY(-2.5px) scaleY(1.025); } }
+.cr-ala-d { animation: cr-aleteo-d 2.6s ease-in-out infinite; }
+.cr-ala-i { animation: cr-aleteo-i 2.6s ease-in-out infinite; }
+@keyframes cr-aleteo-d { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-9deg); } }
+@keyframes cr-aleteo-i { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(9deg); } }
+.cr-svg.etapa-1 .cr-ala-d, .cr-svg.etapa-1 .cr-ala-i { animation-duration: 1.2s; }
+.cr-cola { transform-box: fill-box; transform-origin: 50% 0; animation: cr-cola 3.6s ease-in-out infinite; }
+@keyframes cr-cola { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+.cr-cresta { transform-box: fill-box; transform-origin: 50% 100%; animation: cr-cola 4.2s ease-in-out infinite; }
+.cr-ojos { transform-box: fill-box; transform-origin: center; animation: cr-parpadeo 5s infinite; }
+@keyframes cr-parpadeo { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.08); } }
+.cr-aura { animation: hv-latido 3.4s ease-in-out infinite; transform-origin: 100px 112px; }
+.cr-brillos { animation: hv-parpadeo 2.2s ease-in-out infinite; }
+.cr-zz { animation: cr-zz 2.4s ease-in-out infinite; }
+@keyframes cr-zz { 0%, 100% { opacity: .2; transform: translateY(2px); } 50% { opacity: .9; transform: translateY(-3px); } }
+.cr-svg.humor-dormido .cr-cuerpo { animation-duration: 6s; }
+.cr-svg.humor-dormido .cr-ala-d, .cr-svg.humor-dormido .cr-ala-i { animation: none; }
+.cr-svg.humor-feliz .cr-cuerpo { animation: cr-salta 2.6s ease-in-out infinite; }
+@keyframes cr-salta { 0%, 70%, 100% { transform: translateY(0); } 78% { transform: translateY(-9px) scaleY(1.04); } 86% { transform: translateY(0) scaleY(.96); } 92% { transform: translateY(-3px); } }
+.cr-svg.tocado .cr-cuerpo { animation: cr-brinco .7s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes cr-brinco { 0% { transform: translateY(0) scale(1, 1); } 25% { transform: translateY(0) scale(1.08, .88); } 55% { transform: translateY(-22px) scale(.94, 1.1); } 80% { transform: translateY(0) scale(1.05, .95); } 100% { transform: translateY(0) scale(1); } }
+
+/* Pantalla del huevo / compañero */
+.huevo-escena { position: relative; display: grid; place-items: center; padding: 18px 0 8px; margin: 4px 0 8px; border-radius: 22px; cursor: pointer; background: radial-gradient(circle at 50% 55%, var(--accent-soft), transparent 70%); }
+.huevo-escena .huevo-svg { width: 130px; }
+.huevo-escena .cr-svg { width: 210px; }
+.huevo-escena.pequena { padding: 0; cursor: default; }
+.huevo-escena.pequena .cr-svg { width: 150px; }
+.huevo-svg.grande { width: 120px; margin: 6px auto; }
+.huevo-frase { position: absolute; left: 50%; top: 6px; transform: translateX(-50%); max-width: 92%; background: var(--card); color: var(--text); padding: 8px 14px; border-radius: 16px; font-size: 14px; font-weight: 600; text-align: center; box-shadow: 0 6px 20px rgba(0, 0, 0, .15); animation: frase-sube 2.6s ease-out forwards; pointer-events: none; }
+@keyframes frase-sube { 0% { opacity: 0; transform: translate(-50%, 10px); } 12% { opacity: 1; transform: translate(-50%, 0); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -8px); } }
+.huevos-lista { display: grid; gap: 10px; margin-top: 10px; }
+.huevo-opcion { display: flex; gap: 14px; align-items: center; text-align: left; background: var(--card); color: var(--text); border: 2px solid transparent; border-radius: 18px; padding: 12px 14px; box-shadow: var(--shadow); cursor: pointer; }
+.huevo-opcion:active { border-color: var(--accent); }
+.huevo-opcion .hv { width: 62px; flex: none; }
+.huevo-opcion .huevo-svg { width: 62px; }
+.huevo-opcion .hv-cuerpo { animation: none !important; }
+.huevo-opcion .datos b { font-size: 18px; }
+.coleccion { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; }
+.col-item { flex: none; width: 92px; text-align: center; font-size: 12px; }
+.col-item .cr-svg { width: 92px; }
+.col-item .cr-cuerpo, .col-item .cr-ala-d, .col-item .cr-ala-i, .col-item .cr-cola, .col-item .cr-cresta, .col-item .cr-ojos, .col-item .cr-aura { animation: none; }
+.nombrar { text-align: center; }
+.nombrar input { text-align: center; font-size: 20px; font-weight: 700; margin: 6px 0 4px; }
+
+/* Eclosión */
+.eclosion { position: fixed; inset: 0; z-index: 400; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 20px; background: radial-gradient(circle at 50% 40%, rgba(255, 150, 50, .5), rgba(14, 6, 3, .98) 75%), #0e0603; animation: ecl-entra .5s ease-out; overflow: hidden; }
+@keyframes ecl-entra { from { opacity: 0; } to { opacity: 1; } }
+.eclosion .escena { position: relative; width: 250px; height: 270px; display: grid; place-items: center; transition: transform .6s ease; }
+.eclosion .escena.sube { transform: translateY(-10px) scale(.78); }
+.eclosion .escena .huevo-svg { width: 190px; }
+.eclosion .escena .huevo-svg.mitades { width: 270px; }
+.eclosion .escena .cr-svg { width: 250px; }
+.eclosion-texto { color: #fff3e0; font-size: 19px; font-weight: 700; margin: 0; text-shadow: 0 2px 10px rgba(0, 0, 0, .5); text-align: center; }
+.eclosion #panel-ecl { width: min(340px, 100%); background: var(--card); border-radius: 22px; padding: 14px 16px; animation: ecl-entra .5s ease-out; }
+.eclosion #panel-ecl:empty { display: none; }
+.escena.tiembla .hv-cuerpo { animation: ecl-tiembla 2s ease-in forwards; }
+@keyframes ecl-tiembla { 0% { transform: rotate(0); } 10% { transform: rotate(-3deg); } 20% { transform: rotate(3deg); } 30% { transform: rotate(-5deg); } 40% { transform: rotate(5deg); } 50% { transform: rotate(-8deg) scale(1.02); } 60% { transform: rotate(8deg) scale(1.03); } 70% { transform: rotate(-11deg) scale(1.04); } 80% { transform: rotate(11deg) scale(1.05); } 90% { transform: rotate(-14deg) scale(1.06); } 100% { transform: rotate(14deg) scale(1.07); } }
+.mitades .mitad-sup { transform-box: view-box; transform-origin: 50px 72px; animation: ecl-sup 1.2s cubic-bezier(.2, .7, .3, 1) forwards; }
+.mitades .mitad-inf { transform-box: view-box; transform-origin: 50px 72px; animation: ecl-inf 1.2s cubic-bezier(.2, .7, .3, 1) forwards; }
+@keyframes ecl-sup { 0% { transform: translate(0, 0) rotate(0); } 25% { transform: translate(0, -6px) rotate(0); } 100% { transform: translate(-46px, -78px) rotate(-30deg); opacity: 0; } }
+@keyframes ecl-inf { 0% { transform: translate(0, 0) rotate(0); } 100% { transform: translate(10px, 44px) rotate(7deg); opacity: 0; } }
+.flash { position: absolute; inset: -60px; border-radius: 50%; background: radial-gradient(circle, #fff 0, rgba(255, 232, 150, .95) 28%, rgba(255, 160, 60, 0) 68%); animation: ecl-flash 1s ease-out forwards; pointer-events: none; }
+@keyframes ecl-flash { 0% { opacity: 0; transform: scale(.3); } 25% { opacity: 1; } 100% { opacity: 0; transform: scale(1.5); } }
+.nace .cr-svg { animation: ecl-nace 1s cubic-bezier(.3, 1.6, .5, 1) both; }
+@keyframes ecl-nace { 0% { transform: scale(0) rotate(-20deg); opacity: 0; } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+.chispas { position: absolute; inset: 0; pointer-events: none; }
+.chispas i { position: absolute; left: 50%; top: 50%; width: 9px; height: 9px; margin: -4px; border-radius: 50%; background: radial-gradient(circle, #fff, #ffc400); animation: chispa 1.3s ease-out forwards; }
+@keyframes chispa { 0% { transform: translate(0, 0) scale(.4); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(1.2); opacity: 0; } }
